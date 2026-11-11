@@ -61,7 +61,7 @@ impl Category {
             | "xml" | "yaml" | "yml" | "toml" | "sql" | "swift" | "cs" | "lua" | "gradle"
             | "properties" => Category::Code,
             "zip" | "7z" | "rar" | "tar" | "gz" | "tgz" | "bz2" | "xz" | "tar.gz" | "tar.bz2"
-            | "tar.xz" | "tar.zst" | "zst" | "jar" | "iso" | "cbz" | "cbr" => Category::Archive,
+            | "tar.xz" | "tar.zst" | "zst" | "tzst" | "jar" | "iso" | "cbz" | "cbr" => Category::Archive,
             "apk" | "apks" | "xapk" | "exe" | "msi" | "deb" | "rpm" | "appimage" | "dmg" => {
                 Category::App
             }

@@ -169,6 +169,7 @@ dependencies = [
  "cipher 0.5.2",
  "cpubits",
  "cpufeatures 0.3.1",
+ "zeroize",
 ]
 
 [[package]]
@@ -681,6 +682,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
 dependencies = [
  "hybrid-array",
+ "zeroize",
 ]
 
 [[package]]
@@ -1425,6 +1427,7 @@ dependencies = [
  "russh",
  "russh-sftp",
  "rustls",
+ "ruzstd",
  "serde",
  "serde_json",
  "sevenz-rust2",
@@ -1434,6 +1437,7 @@ dependencies = [
  "tempfile",
  "time",
  "tokio",
+ "unrar",
  "ureq",
  "webpki-roots",
  "zip",
@@ -1461,6 +1465,7 @@ dependencies = [
  "const-oid 0.10.3",
  "crypto-common 0.2.2",
  "ctutils",
+ "zeroize",
 ]
 
 [[package]]
@@ -5250,6 +5255,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
+name = "ruzstd"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69e4ce4a039f42bf25920b95667e4d789e98749ab11bbb8d2c2936f788421bb5"
+dependencies = [
+ "twox-hash",
+]
+
+[[package]]
 name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5466,9 +5480,13 @@ version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5e465701779cbc6d0d10cf907f175035cfdd50b8d3cb628d7f1f435ef02972f"
 dependencies = [
+ "aes 0.9.4",
+ "cbc 0.2.1",
  "crc32fast",
+ "getrandom 0.4.3",
  "js-sys",
  "lzma-rust2",
+ "sha2 0.11.1",
  "wasm-bindgen",
 ]
 
@@ -6318,6 +6336,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "twox-hash"
+version = "2.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86a801b3cea342a06d468c8710662aa29e5e05e4f5c0d62f00bbb7f2ad7941c2"
+
+[[package]]
 name = "type-map"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6415,6 +6439,29 @@ checksum = "f4987bdc12753382e0bec4a65c50738ffaabc998b9cdd1f952fb5f39b0048a96"
 dependencies = [
  "crypto-common 0.2.2",
  "ctutils",
+]
+
+[[package]]
+name = "unrar"
+version = "0.5.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92ec61343a630d2b50d13216dea5125e157d3fc180a7d3f447d22fe146b648fc"
+dependencies = [
+ "bitflags 2.13.2",
+ "regex",
+ "unrar_sys",
+ "widestring",
+]
+
+[[package]]
+name = "unrar_sys"
+version = "0.5.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b77675b883cfbe6bf41e6b7a5cd6008e0a83ba497de3d96e41a064bbeead765"
+dependencies = [
+ "cc",
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -7719,14 +7766,18 @@ version = "9.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3476fd497ac8af5b1ec7b51acab7bef380f7e8dd8e0487595bafd839417a302"
 dependencies = [
+ "aes 0.9.4",
  "constant_time_eq",
  "crc32fast",
  "flate2",
  "getrandom 0.4.3",
+ "hmac 0.13.0",
  "indexmap",
  "libc",
  "memchr",
  "nix 0.31.3",
+ "pbkdf2 0.13.0",
+ "sha1 0.11.0",
  "time",
  "typed-path",
  "windows-sys 0.61.2",

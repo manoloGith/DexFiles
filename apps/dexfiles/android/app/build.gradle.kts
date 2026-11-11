@@ -31,6 +31,7 @@ abstract class CargoNdkBuild : DefaultTask() {
     @get:Input abstract val apiLevel: Property<Int>
     @get:Input abstract val release: Property<Boolean>
     @get:Input abstract val library: Property<String>
+    @get:Input abstract val features: Property<String>
     @get:OutputDirectory abstract val outputDir: DirectoryProperty
 
     @TaskAction
@@ -44,6 +45,7 @@ abstract class CargoNdkBuild : DefaultTask() {
             "--remap-path-prefix=$cargoHome=/cargo",
         )
         val profile = if (release.get()) listOf("--release") else emptyList()
+        val cargoFeatures = features.get().takeIf { it.isNotBlank() }?.let { listOf("--features", it) } ?: emptyList()
         execOperations.exec {
             workingDir(workspaceDir.get())
             environment("ANDROID_NDK_HOME", ndkDir.get())
@@ -51,7 +53,7 @@ abstract class CargoNdkBuild : DefaultTask() {
             commandLine(
                 listOf(cargo.get(), "ndk") + targets +
                     listOf("--platform", apiLevel.get().toString(), "-o", out, "build") + profile +
-                    listOf("--locked", "-p", library.get(), "--lib"),
+                    listOf("--locked", "-p", library.get(), "--lib") + cargoFeatures,
             )
         }
         // cargo-ndk copies every shared library cargo left behind; only the app's ships.
@@ -126,6 +128,9 @@ androidComponents {
             // a debug APK still gets an optimised library (thumbnails and archives need it)
             release.set(providers.gradleProperty("dexfiles.rustDebug").orNull != "true")
             library.set(libName)
+            // -Pdexfiles.features=rar: RAR extraction (UnRAR, not free software) for the APKs
+            // published on GitHub; F-Droid's build leaves it out.
+            features.set(providers.gradleProperty("dexfiles.features").getOrElse(""))
             // cargo knows what changed
             outputs.upToDateWhen { false }
         }

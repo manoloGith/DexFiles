@@ -267,3 +267,6 @@ change	Change	Cambiar
 remove_default	Remove	Quitar
 extension	Extension	Extensión
 choose_app	Choose app…	Elegir app…
+archive_password_for	Password for “{}”	Contraseña de «{}»
+wrong_password	That password is not right.	La contraseña no es correcta.
+extract	Extract	Extraer

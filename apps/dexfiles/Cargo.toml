@@ -21,6 +21,9 @@ required-features = ["desktop"]
 [features]
 default = ["network"]
 desktop = ["eframe/x11", "eframe/wayland", "dep:open"]
+# RAR extraction with RARLAB's UnRAR (C++). Its licence is not a free-software one, so only the
+# builds published on GitHub turn this on; F-Droid builds leave it off (docs/compression.md).
+rar = ["dep:unrar"]
 # FTP/FTPS, SFTP, SMB and WebDAV locations.
 network = ["dep:suppaftp", "dep:ureq", "dep:russh", "dep:russh-sftp", "dep:tokio", "dep:smb", "dep:rustls", "dep:webpki-roots", "dep:time"]
 
@@ -35,11 +38,12 @@ base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 fs4 = "1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "ico", "tiff"] }
-zip = { version = "9", default-features = false, features = ["deflate", "time"] }
-sevenz-rust2 = { version = "0.25", default-features = false, features = ["compress", "util"] }
+zip = { version = "9", default-features = false, features = ["deflate", "time", "aes-crypto"] }
+sevenz-rust2 = { version = "0.25", default-features = false, features = ["compress", "util", "aes256"] }
 tar = { version = "0.4", default-features = false }
 flate2 = "1"
 bzip2 = "0.6"
+ruzstd = "0.9"
 lzma-rust2 = { version = "0.25", features = ["xz"] }
 calamine = "0.38"
 quick-xml = "0.42"
@@ -56,6 +60,7 @@ webpki-roots = { version = "1", optional = true }
 time = { version = "0.3", optional = true }
 
 open = { version = "5", optional = true }
+unrar = { version = "0.5", optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 eframe = { version = "0.37", default-features = false, features = ["android-game-activity"] }

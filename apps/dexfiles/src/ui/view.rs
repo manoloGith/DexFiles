@@ -257,7 +257,7 @@ pub fn job_title(kind: &crate::ops::JobKind) -> String {
                 "job_move"
             };
             format!(
-                "{} → {}",
+                "{} · {}",
                 tf(key, sources.len()),
                 super::pane::location_title(dest)
             )
@@ -723,6 +723,7 @@ fn item_menu(app: &mut App, ui: &mut Ui, p: usize, e: &Entry) {
                         sources: sel.clone(),
                         dest: parent.join(&name),
                         format: f,
+                        password: None,
                     });
                 } else {
                     app.say(t("compress_local_only"));

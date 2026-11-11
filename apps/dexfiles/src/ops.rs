@@ -53,10 +53,12 @@ pub enum JobKind {
         sources: Vec<Location>,
         dest: Location,
         format: ArchiveFormat,
+        password: Option<String>,
     },
     Extract {
         archive: Location,
         dest: Location,
+        password: Option<String>,
     },
     Mkdir {
         location: Location,
@@ -97,6 +99,8 @@ pub struct Status {
     /// What the job made (a new folder, a renamed file), to select it.
     pub created: Vec<Location>,
     pub question: Option<Question>,
+    /// An extraction stopped for a password: (archive, destination, a wrong one was given).
+    pub password_needed: Option<(Location, Location, bool)>,
 }
 
 pub struct JobState {
@@ -322,6 +326,7 @@ fn run(state: &JobState, kind: JobKind) {
             sources,
             dest,
             format,
+            password,
         } => {
             let (Some(target), true) = (dest.as_local(), sources.iter().all(Location::is_local))
             else {
@@ -335,7 +340,7 @@ fn run(state: &JobState, kind: JobKind) {
                 .iter()
                 .filter_map(|l| l.as_local().map(PathBuf::from))
                 .collect();
-            let r = crate::archive::compress(&paths, target, format, &mut |done, total, name| {
+            let r = crate::archive::compress(&paths, target, format, password.as_deref(), &mut |done, total, name| {
                 state.update(|s| {
                     s.done_bytes = done;
                     s.total_bytes = total;
@@ -354,7 +359,7 @@ fn run(state: &JobState, kind: JobKind) {
             }
             state.touch(dest.parent());
         }
-        JobKind::Extract { archive, dest } => {
+        JobKind::Extract { archive, dest, password } => {
             let local = match vfs::local_copy(&archive, &mut |_| !state.cancelled()) {
                 Ok(p) => p,
                 Err(e) => return state.error(&archive.name(), &e),
@@ -366,7 +371,7 @@ fn run(state: &JobState, kind: JobKind) {
                 );
                 return;
             };
-            let r = crate::archive::extract(&local, target, &mut |done, total, name| {
+            let r = crate::archive::extract(&local, target, password.as_deref(), &mut |done, total, name| {
                 state.update(|s| {
                     s.done_bytes = done;
                     s.total_bytes = total;
@@ -375,7 +380,10 @@ fn run(state: &JobState, kind: JobKind) {
                 !state.cancelled()
             });
             if let Err(e) = r {
-                if !vfs::is_cancelled(&e) {
+                if crate::archive::needs_password(&e) {
+                    let wrong = crate::archive::wrong_password(&e);
+                    state.update(|s| s.password_needed = Some((archive.clone(), dest.clone(), wrong)));
+                } else if !vfs::is_cancelled(&e) {
                     state.error(&archive.name(), &e);
                 }
             } else {

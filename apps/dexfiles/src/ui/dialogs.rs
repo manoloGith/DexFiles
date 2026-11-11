@@ -59,6 +59,14 @@ pub enum Dialog {
         items: Vec<Location>,
         name: String,
         format: ArchiveFormat,
+        password: String,
+    },
+    /// An encrypted archive: ask for its password and extract again.
+    ArchivePassword {
+        archive: Location,
+        dest: Location,
+        wrong: bool,
+        text: String,
     },
     Message {
         title: String,
@@ -130,6 +138,7 @@ impl Dialog {
             items,
             name,
             format: ArchiveFormat::Zip,
+            password: String::new(),
         }
     }
 
@@ -385,10 +394,32 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             }
             keep && !close
         }
+        Dialog::ArchivePassword { archive, dest, wrong, text } => {
+            let mut keep = true;
+            let close = modal(ctx, "archive-password", 400.0, |ui| {
+                ui.heading(tf("archive_password_for", archive.name()));
+                if *wrong {
+                    ui.colored_label(ui.visuals().error_fg_color, t("wrong_password"));
+                }
+                let r = ui.add(egui::TextEdit::singleline(text).password(true).desired_width(f32::INFINITY));
+                r.request_focus();
+                let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                let (ok, cancel) = buttons(ui, t("extract"), false);
+                if ok || enter {
+                    app.start_job(crate::ops::JobKind::Extract { archive: archive.clone(), dest: dest.clone(), password: Some(std::mem::take(text)) });
+                    keep = false;
+                }
+                if cancel {
+                    keep = false;
+                }
+            });
+            keep && !close
+        }
         Dialog::Compress {
             items,
             name,
             format,
+            password,
         } => {
             let mut keep = true;
             let close = modal(ctx, "compress", 420.0, |ui| {
@@ -409,6 +440,12 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                             }
                         });
                 });
+                if format.supports_password() {
+                    ui.horizontal(|ui| {
+                        ui.label(t("password"));
+                        ui.add(egui::TextEdit::singleline(password).password(true).hint_text(t("optional")).desired_width(200.0));
+                    });
+                }
                 ui.small(t("compress_formats_hint"));
                 let (ok, cancel) = buttons(ui, t("compress"), false);
                 if ok
@@ -423,6 +460,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                         sources: items.clone(),
                         dest: parent.join(&file),
                         format: *format,
+                        password: (!password.is_empty() && format.supports_password()).then(|| password.clone()),
                     });
                     keep = false;
                 }

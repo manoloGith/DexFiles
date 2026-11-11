@@ -98,6 +98,7 @@ pub enum Action {
         sources: Vec<Location>,
         dest: Location,
         format: ArchiveFormat,
+        password: Option<String>,
     },
     DeleteNow(Vec<Location>),
     EmptyTrashNow,
@@ -513,6 +514,7 @@ impl App {
         let mut touched: Vec<Location> = Vec::new();
         let mut created: Vec<Location> = Vec::new();
         let mut errors: Vec<String> = Vec::new();
+        let mut password: Option<(Location, Location, bool)> = None;
         self.jobs.retain(|job| {
             let s = job.state.status();
             if !s.finished {
@@ -520,6 +522,9 @@ impl App {
             }
             touched.extend(s.touched.iter().cloned());
             created.extend(s.created.iter().cloned());
+            if let Some(p) = &s.password_needed {
+                password.get_or_insert_with(|| p.clone());
+            }
             errors.extend(s.errors.iter().cloned());
             false
         });
@@ -539,6 +544,9 @@ impl App {
                 title: t("errors_title").to_owned(),
                 text: format!("{text}{more}"),
             });
+        }
+        if let Some((archive, dest, wrong)) = password {
+            self.dialog = Some(Dialog::ArchivePassword { archive, dest, wrong, text: String::new() });
         }
         if touched.is_empty() {
             return;
@@ -858,10 +866,12 @@ impl App {
                 sources,
                 dest,
                 format,
+                password,
             } => self.start_job(JobKind::Compress {
                 sources,
                 dest,
                 format,
+                password,
             }),
             Action::Extract {
                 archive,
@@ -884,7 +894,7 @@ impl App {
                 } else {
                     parent
                 };
-                self.start_job(JobKind::Extract { archive, dest });
+                self.start_job(JobKind::Extract { archive, dest, password: None });
             }
             Action::Share(items, email) => self.share(items, email),
             Action::OpenWith(l) => {
