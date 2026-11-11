@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- GameActivity is an AppCompatActivity: it needs an AppCompat theme. egui draws everything,
+         so no action bar and no window background flash. -->
+    <style name="Theme.DexFiles" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>

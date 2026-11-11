@@ -1,0 +1,50 @@
+name: Android
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Rust (rust-toolchain.toml) and cargo-ndk
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          cargo install cargo-ndk --version 4.1.2 --locked
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36 build-tools;36.0.0 ndk;29.0.14206865"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+
+      - name: Tests and the desktop binary
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q libxkbcommon-dev libwayland-dev
+          cargo test --locked -p dexfiles --features desktop
+          cargo clippy --locked -p dexfiles --features desktop -- -D warnings
+
+      - name: APK (arm64-v8a and x86_64)
+        working-directory: apps/dexfiles/android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dexfiles-debug-apk
+          path: apps/dexfiles/android/app/build/outputs/apk/debug/*.apk

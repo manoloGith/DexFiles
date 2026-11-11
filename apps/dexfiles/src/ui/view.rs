@@ -2,7 +2,9 @@
 //! list, details, content), with selection by mouse, keyboard and rubber band, drag and drop,
 //! and context menus.
 
-use egui::{Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, Ui, Vec2, pos2, vec2};
+use egui::{
+    Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
+};
 
 use super::app::{Action, App, DragPayload, DropTarget};
 use super::icons::{self, Sym};
@@ -16,20 +18,35 @@ use crate::vfs::{Entry, Location};
 pub fn window(app: &mut App, ui: &mut Ui) {
     let pal = theme::palette(app.dark);
     if !app.storage_ok {
-        egui::Panel::top("storage").frame(egui::Frame::new().fill(Color32::from_rgb(0xff, 0xf4, 0xd6)).inner_margin(8)).show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.colored_label(Color32::from_rgb(0x6b, 0x4a, 0x00), t("storage_needed"));
-                if ui.button(t("grant_access")).clicked() {
-                    crate::platform::request_storage_access();
-                }
+        egui::Panel::top("storage")
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::from_rgb(0xff, 0xf4, 0xd6))
+                    .inner_margin(8),
+            )
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.colored_label(Color32::from_rgb(0x6b, 0x4a, 0x00), t("storage_needed"));
+                    if ui.button(t("grant_access")).clicked() {
+                        crate::platform::request_storage_access();
+                    }
+                });
             });
-        });
     }
     egui::Panel::top("toolbar")
-        .frame(egui::Frame::new().fill(pal.toolbar).inner_margin(egui::Margin::symmetric(8, 6)).stroke(Stroke::new(1.0, pal.separator)))
+        .frame(
+            egui::Frame::new()
+                .fill(pal.toolbar)
+                .inner_margin(egui::Margin::symmetric(8, 6))
+                .stroke(Stroke::new(1.0, pal.separator)),
+        )
         .show(ui, |ui| super::toolbar::show(app, ui));
     egui::Panel::bottom("status")
-        .frame(egui::Frame::new().fill(pal.toolbar).inner_margin(egui::Margin::symmetric(10, 3)))
+        .frame(
+            egui::Frame::new()
+                .fill(pal.toolbar)
+                .inner_margin(egui::Margin::symmetric(10, 3)),
+        )
         .show(ui, |ui| status_bar(app, ui));
     if app.settings.show_sidebar {
         let width = if app.narrow { 190.0 } else { 230.0 };
@@ -37,7 +54,11 @@ pub fn window(app: &mut App, ui: &mut Ui) {
             .resizable(true)
             .default_size(width)
             .size_range(150.0..=420.0)
-            .frame(egui::Frame::new().fill(pal.sidebar).inner_margin(egui::Margin::symmetric(6, 8)))
+            .frame(
+                egui::Frame::new()
+                    .fill(pal.sidebar)
+                    .inner_margin(egui::Margin::symmetric(6, 8)),
+            )
             .show(ui, |ui| super::sidebar::show(app, ui));
     }
     if app.settings.show_preview && !app.narrow {
@@ -45,7 +66,11 @@ pub fn window(app: &mut App, ui: &mut Ui) {
             .resizable(true)
             .default_size(300.0)
             .size_range(200.0..=700.0)
-            .frame(egui::Frame::new().fill(pal.sidebar).inner_margin(egui::Margin::same(12)))
+            .frame(
+                egui::Frame::new()
+                    .fill(pal.sidebar)
+                    .inner_margin(egui::Margin::same(12)),
+            )
             .show(ui, |ui| super::preview_panel::show(app, ui));
     }
     egui::CentralPanel::no_frame().show(ui, |ui| {
@@ -55,9 +80,13 @@ pub fn window(app: &mut App, ui: &mut Ui) {
             let mid = rect.center().x;
             let left = Rect::from_min_max(rect.min, pos2(mid - 1.0, rect.max.y));
             let right = Rect::from_min_max(pos2(mid + 1.0, rect.min.y), rect.max);
-            ui.painter().line_segment([pos2(mid, rect.top()), pos2(mid, rect.bottom())], Stroke::new(1.0, pal.separator));
+            ui.painter().line_segment(
+                [pos2(mid, rect.top()), pos2(mid, rect.bottom())],
+                Stroke::new(1.0, pal.separator),
+            );
             for (p, r) in [(0usize, left), (1usize, right)] {
-                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt(("pane", p)));
+                let mut child =
+                    ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt(("pane", p)));
                 child.set_clip_rect(r);
                 pane(app, &mut child, p, true);
             }
@@ -95,7 +124,11 @@ fn status_bar(app: &mut App, ui: &mut Ui) {
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if let Some(space) = space_for(app, tab_location(app, p)) {
-                ui.small(format!("{} {}", fileinfo::format_size(space.0), tf("free_of", fileinfo::format_size(space.1))));
+                ui.small(format!(
+                    "{} {}",
+                    fileinfo::format_size(space.0),
+                    tf("free_of", fileinfo::format_size(space.1))
+                ));
             }
             jobs_indicator(app, ui);
         });
@@ -117,13 +150,25 @@ pub fn space_for(app: &App, l: Location) -> Option<(u64, u64)> {
             })
             .max_by_key(|(n, _)| *n)
             .map(|(_, v)| v),
-        Location::Remote { server, .. } => app.space.get(&Location::Remote { server: *server, path: "/".into() }).copied(),
+        Location::Remote { server, .. } => app
+            .space
+            .get(&Location::Remote {
+                server: *server,
+                path: "/".into(),
+            })
+            .copied(),
         Location::Trash => None,
     }
 }
 
 fn jobs_indicator(app: &mut App, ui: &mut Ui) {
-    let visible: Vec<usize> = app.jobs.iter().enumerate().filter(|(_, j)| j.visible).map(|(i, _)| i).collect();
+    let visible: Vec<usize> = app
+        .jobs
+        .iter()
+        .enumerate()
+        .filter(|(_, j)| j.visible)
+        .map(|(i, _)| i)
+        .collect();
     if visible.is_empty() {
         return;
     }
@@ -133,9 +178,18 @@ fn jobs_indicator(app: &mut App, ui: &mut Ui) {
         done += s.done_bytes;
         total += s.total_bytes;
     }
-    let frac = if total > 0 { done as f32 / total as f32 } else { 0.0 };
+    let frac = if total > 0 {
+        done as f32 / total as f32
+    } else {
+        0.0
+    };
     let label = tf("jobs_running", visible.len());
-    let resp = ui.add(egui::ProgressBar::new(frac).desired_width(160.0).text(label).corner_radius(4));
+    let resp = ui.add(
+        egui::ProgressBar::new(frac)
+            .desired_width(160.0)
+            .text(label)
+            .corner_radius(4),
+    );
     let resp = resp.interact(Sense::click());
     if resp.clicked() {
         app.show_jobs = !app.show_jobs;
@@ -152,15 +206,30 @@ fn jobs_indicator(app: &mut App, ui: &mut Ui) {
                     let job = &app.jobs[i];
                     let s = job.state.status();
                     ui.label(egui::RichText::new(job_title(&job.kind)).strong());
-                    let frac = if s.total_bytes > 0 { s.done_bytes as f32 / s.total_bytes as f32 } else if s.total_items > 0 { s.done_items as f32 / s.total_items as f32 } else { 0.0 };
+                    let frac = if s.total_bytes > 0 {
+                        s.done_bytes as f32 / s.total_bytes as f32
+                    } else if s.total_items > 0 {
+                        s.done_items as f32 / s.total_items as f32
+                    } else {
+                        0.0
+                    };
                     ui.horizontal(|ui| {
-                        ui.add(egui::ProgressBar::new(frac).desired_width(250.0).show_percentage());
+                        ui.add(
+                            egui::ProgressBar::new(frac)
+                                .desired_width(250.0)
+                                .show_percentage(),
+                        );
                         if icons::sym_button(ui, Sym::Close, false, t("cancel")).clicked() {
                             job.state.cancel();
                         }
                     });
                     let detail = if s.total_bytes > 0 {
-                        format!("{} / {} · {}", fileinfo::format_size(s.done_bytes), fileinfo::format_size(s.total_bytes), s.current)
+                        format!(
+                            "{} / {} · {}",
+                            fileinfo::format_size(s.done_bytes),
+                            fileinfo::format_size(s.total_bytes),
+                            s.current
+                        )
                     } else {
                         s.current.clone()
                     };
@@ -177,9 +246,21 @@ fn jobs_indicator(app: &mut App, ui: &mut Ui) {
 pub fn job_title(kind: &crate::ops::JobKind) -> String {
     use crate::ops::{JobKind, Mode};
     match kind {
-        JobKind::Transfer { sources, dest, mode } => {
-            let key = if *mode == Mode::Copy { "job_copy" } else { "job_move" };
-            format!("{} → {}", tf(key, sources.len()), super::pane::location_title(dest))
+        JobKind::Transfer {
+            sources,
+            dest,
+            mode,
+        } => {
+            let key = if *mode == Mode::Copy {
+                "job_copy"
+            } else {
+                "job_move"
+            };
+            format!(
+                "{} → {}",
+                tf(key, sources.len()),
+                super::pane::location_title(dest)
+            )
         }
         JobKind::Delete { items } => tf("job_delete", items.len()),
         JobKind::Trash { items } => tf("job_trash", items.len()),
@@ -199,7 +280,11 @@ fn pane(app: &mut App, ui: &mut Ui, p: usize, dual: bool) {
     let full = ui.max_rect();
     let active = app.active_pane == p;
     // A click anywhere in the pane makes it the active one.
-    if ui.input(|i| i.pointer.any_pressed()) && ui.input(|i| i.pointer.interact_pos()).is_some_and(|pos| full.contains(pos)) {
+    if ui.input(|i| i.pointer.any_pressed())
+        && ui
+            .input(|i| i.pointer.interact_pos())
+            .is_some_and(|pos| full.contains(pos))
+    {
         app.active_pane = p;
     }
     if dual || app.panes[p].tabs.len() > 1 {
@@ -211,22 +296,42 @@ fn pane(app: &mut App, ui: &mut Ui, p: usize, dual: bool) {
             let title = app.tab(p).title();
             let color = if active { theme::ACCENT } else { pal.weak };
             ui.label(egui::RichText::new(title).strong().color(color));
-            ui.small(egui::RichText::new(app.tab(p).location().address(&app.settings.servers)).color(pal.weak));
+            ui.small(
+                egui::RichText::new(app.tab(p).location().address(&app.settings.servers))
+                    .color(pal.weak),
+            );
         });
     }
     search_bar(app, ui, p);
     let rect = ui.available_rect_before_wrap();
     let here = app.tab(p).location().clone();
     if here != Location::Trash {
-        app.drop_targets.push(DropTarget { rect, dest: here.clone(), priority: 1, trash: false });
+        app.drop_targets.push(DropTarget {
+            rect,
+            dest: here.clone(),
+            priority: 1,
+            trash: false,
+        });
     } else {
-        app.drop_targets.push(DropTarget { rect, dest: here.clone(), priority: 1, trash: true });
+        app.drop_targets.push(DropTarget {
+            rect,
+            dest: here.clone(),
+            priority: 1,
+            trash: true,
+        });
     }
     // Highlight a pane a drag is over.
     if egui::DragAndDrop::has_payload_of_type::<DragPayload>(ui.ctx())
-        && ui.input(|i| i.pointer.hover_pos()).is_some_and(|pos| rect.contains(pos))
+        && ui
+            .input(|i| i.pointer.hover_pos())
+            .is_some_and(|pos| rect.contains(pos))
     {
-        ui.painter().rect_stroke(rect.shrink(2.0), 6, Stroke::new(2.0, theme::ACCENT), StrokeKind::Inside);
+        ui.painter().rect_stroke(
+            rect.shrink(2.0),
+            6,
+            Stroke::new(2.0, theme::ACCENT),
+            StrokeKind::Inside,
+        );
     }
     let tab = app.tab(p);
     if tab.loading && tab.visible.is_empty() {
@@ -251,14 +356,24 @@ fn pane(app: &mut App, ui: &mut Ui, p: usize, dual: bool) {
     }
     if tab.visible.is_empty() {
         let key = if tab.search.is_some() {
-            if tab.search.as_ref().is_some_and(|s| s.is_done()) { "no_results" } else { "searching" }
+            if tab.search.as_ref().is_some_and(|s| s.is_done()) {
+                "no_results"
+            } else {
+                "searching"
+            }
         } else if !tab.filter.is_empty() {
             "no_results"
         } else {
             "empty_folder"
         };
         let r = ui.available_rect_before_wrap();
-        ui.painter().text(r.center(), Align2::CENTER_CENTER, t(key), FontId::proportional(15.0), pal.weak);
+        ui.painter().text(
+            r.center(),
+            Align2::CENTER_CENTER,
+            t(key),
+            FontId::proportional(15.0),
+            pal.weak,
+        );
         background_menu_area(app, ui, p, r);
         return;
     }
@@ -282,19 +397,57 @@ fn tab_strip(app: &mut App, ui: &mut Ui, p: usize, _dual: bool, active_pane: boo
             let selected = app.panes[p].active == i;
             let title = app.panes[p].tabs[i].title();
             let (rect, resp) = ui.allocate_exact_size(vec2(w, 28.0), Sense::click());
-            let fill = if selected { pal.content } else if resp.hovered() { pal.hover } else { Color32::TRANSPARENT };
-            ui.painter().rect_filled(rect.shrink2(vec2(0.0, 2.0)), CornerRadius::same(6), fill);
+            let fill = if selected {
+                pal.content
+            } else if resp.hovered() {
+                pal.hover
+            } else {
+                Color32::TRANSPARENT
+            };
+            ui.painter()
+                .rect_filled(rect.shrink2(vec2(0.0, 2.0)), CornerRadius::same(6), fill);
             if selected && active_pane {
-                ui.painter().line_segment([pos2(rect.left() + 8.0, rect.bottom() - 2.0), pos2(rect.right() - 8.0, rect.bottom() - 2.0)], Stroke::new(2.0, theme::ACCENT));
+                ui.painter().line_segment(
+                    [
+                        pos2(rect.left() + 8.0, rect.bottom() - 2.0),
+                        pos2(rect.right() - 8.0, rect.bottom() - 2.0),
+                    ],
+                    Stroke::new(2.0, theme::ACCENT),
+                );
             }
             let text_rect = rect.shrink2(vec2(10.0, 0.0));
-            let galley = ui.painter().layout(title.clone(), FontId::proportional(13.0), ui.visuals().text_color(), text_rect.width() - 16.0);
-            ui.painter().galley(pos2(text_rect.left(), rect.center().y - galley.size().y / 2.0), galley, ui.visuals().text_color());
+            let galley = ui.painter().layout(
+                title.clone(),
+                FontId::proportional(13.0),
+                ui.visuals().text_color(),
+                text_rect.width() - 16.0,
+            );
+            ui.painter().galley(
+                pos2(text_rect.left(), rect.center().y - galley.size().y / 2.0),
+                galley,
+                ui.visuals().text_color(),
+            );
             // close button
-            let close = Rect::from_center_size(pos2(rect.right() - 14.0, rect.center().y), Vec2::splat(16.0));
-            let close_resp = ui.interact(close, ui.scope_id().with(("close-tab", p, i)), Sense::click());
+            let close = Rect::from_center_size(
+                pos2(rect.right() - 14.0, rect.center().y),
+                Vec2::splat(16.0),
+            );
+            let close_resp = ui.interact(
+                close,
+                ui.scope_id().with(("close-tab", p, i)),
+                Sense::click(),
+            );
             if (resp.hovered() || close_resp.hovered()) && n > 1 {
-                icons::sym(ui.painter(), close, Sym::Close, if close_resp.hovered() { theme::ACCENT } else { pal.weak });
+                icons::sym(
+                    ui.painter(),
+                    close,
+                    Sym::Close,
+                    if close_resp.hovered() {
+                        theme::ACCENT
+                    } else {
+                        pal.weak
+                    },
+                );
             }
             if close_resp.clicked() || resp.middle_clicked() {
                 app.actions.push(Action::CloseTab(p, i));
@@ -303,7 +456,12 @@ fn tab_strip(app: &mut App, ui: &mut Ui, p: usize, _dual: bool, active_pane: boo
             }
             // Dropping onto a tab moves into its folder.
             let dest = app.panes[p].tabs[i].location().clone();
-            app.drop_targets.push(DropTarget { rect, dest, priority: 3, trash: false });
+            app.drop_targets.push(DropTarget {
+                rect,
+                dest,
+                priority: 3,
+                trash: false,
+            });
             resp.on_hover_text(title);
         }
         if icons::sym_button(ui, Sym::Plus, false, t("new_tab")).clicked() {
@@ -314,47 +472,71 @@ fn tab_strip(app: &mut App, ui: &mut Ui, p: usize, _dual: bool, active_pane: boo
 
 fn search_bar(app: &mut App, ui: &mut Ui, p: usize) {
     let pal = theme::palette(app.dark);
-    let Some(search) = &app.tab(p).search else { return };
+    let Some(search) = &app.tab(p).search else {
+        return;
+    };
     let done = search.is_done();
     let scanned = search.scanned.load(std::sync::atomic::Ordering::Relaxed);
     let root = super::pane::location_title(&search.root);
     let found = app.tab(p).visible.len();
-    egui::Frame::new().fill(pal.sidebar).inner_margin(egui::Margin::symmetric(10, 4)).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            if !done {
-                ui.add(egui::Spinner::new().size(14.0));
-            }
-            ui.label(format!("{} · {} · {}", tf("results_in", root), tf("n_found", found), tf("n_scanned", scanned)));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(t("close_search")).clicked() {
-                    app.actions.push(Action::ClearSearch(p));
+    egui::Frame::new()
+        .fill(pal.sidebar)
+        .inner_margin(egui::Margin::symmetric(10, 4))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                if !done {
+                    ui.add(egui::Spinner::new().size(14.0));
                 }
-                if !done && ui.button(t("stop")).clicked()
-                    && let Some(s) = &app.tab(p).search
-                {
-                    s.cancel();
-                }
+                ui.label(format!(
+                    "{} · {} · {}",
+                    tf("results_in", root),
+                    tf("n_found", found),
+                    tf("n_scanned", scanned)
+                ));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button(t("close_search")).clicked() {
+                        app.actions.push(Action::ClearSearch(p));
+                    }
+                    if !done
+                        && ui.button(t("stop")).clicked()
+                        && let Some(s) = &app.tab(p).search
+                    {
+                        s.cancel();
+                    }
+                });
             });
         });
-    });
 }
 
 /// Draws the icon of an entry: its thumbnail when there is one.
 pub fn entry_icon(app: &mut App, ui: &Ui, rect: Rect, e: &Entry, allow_thumb: bool) {
     let cat = Category::of(&e.ext, e.is_dir());
-    let thumb = allow_thumb && app.settings.thumbnails && cat == Category::Image && (e.location.is_local() || app.settings.remote_thumbnails) && rect.width() >= 30.0;
+    let thumb = allow_thumb
+        && app.settings.thumbnails
+        && cat == Category::Image
+        && (e.location.is_local() || app.settings.remote_thumbnails)
+        && rect.width() >= 30.0;
     let painter = ui.painter();
     if thumb && let Some(tex) = app.thumbs.get(e) {
         let size = tex.size_vec2();
         let scale = (rect.width() / size.x).min(rect.height() / size.y);
         let r = Rect::from_center_size(rect.center(), size * scale);
-        painter.rect_filled(r.expand(1.0), CornerRadius::same(3), theme::palette(app.dark).separator);
-        egui::Image::from_texture(&tex).corner_radius(3).paint_at(ui, r);
+        painter.rect_filled(
+            r.expand(1.0),
+            CornerRadius::same(3),
+            theme::palette(app.dark).separator,
+        );
+        egui::Image::from_texture(&tex)
+            .corner_radius(3)
+            .paint_at(ui, r);
     } else {
         icons::file_icon(painter, rect, cat, &e.ext, app.dark);
     }
     if e.symlink {
-        let b = Rect::from_min_size(pos2(rect.left(), rect.bottom() - rect.height() * 0.3), Vec2::splat(rect.height() * 0.3));
+        let b = Rect::from_min_size(
+            pos2(rect.left(), rect.bottom() - rect.height() * 0.3),
+            Vec2::splat(rect.height() * 0.3),
+        );
         painter.circle_filled(b.center(), b.width() / 2.0, Color32::WHITE);
         icons::sym(painter, b.shrink(1.0), Sym::Forward, Color32::from_gray(60));
     }
@@ -402,9 +584,21 @@ fn item_interact(app: &mut App, ui: &mut Ui, p: usize, i: usize, resp: &egui::Re
         resp.dnd_set_drag_payload(DragPayload { items, pane: p });
     }
     if e.is_dir() && e.trash.is_none() {
-        app.drop_targets.push(DropTarget { rect: resp.rect, dest: e.location.clone(), priority: 2, trash: false });
-        if egui::DragAndDrop::payload::<DragPayload>(ui.ctx()).is_some_and(|d| !d.items.contains(&e.location)) && resp.contains_pointer() {
-            ui.painter().rect_filled(resp.rect, CornerRadius::same(6), theme::palette(app.dark).drop);
+        app.drop_targets.push(DropTarget {
+            rect: resp.rect,
+            dest: e.location.clone(),
+            priority: 2,
+            trash: false,
+        });
+        if egui::DragAndDrop::payload::<DragPayload>(ui.ctx())
+            .is_some_and(|d| !d.items.contains(&e.location))
+            && resp.contains_pointer()
+        {
+            ui.painter().rect_filled(
+                resp.rect,
+                CornerRadius::same(6),
+                theme::palette(app.dark).drop,
+            );
         }
     }
     resp.context_menu(|ui| item_menu(app, ui, p, e));
@@ -414,7 +608,11 @@ fn item_menu(app: &mut App, ui: &mut Ui, p: usize, e: &Entry) {
     ui.set_min_width(220.0);
     let sel = {
         let s = app.selection(p);
-        if s.is_empty() { vec![e.location.clone()] } else { s }
+        if s.is_empty() {
+            vec![e.location.clone()]
+        } else {
+            s
+        }
     };
     let many = sel.len() > 1;
     if e.trash.is_some() {
@@ -440,17 +638,19 @@ fn item_menu(app: &mut App, ui: &mut Ui, p: usize, e: &Entry) {
             app.actions.push(Action::OpenInNewTab(e.location.clone()));
         }
         if ui.button(t("open_other_pane")).clicked() {
-            app.actions.push(Action::OpenInOtherPane(e.location.clone()));
+            app.actions
+                .push(Action::OpenInOtherPane(e.location.clone()));
         }
     } else if ui.button(t("open_with")).clicked() {
         app.actions.push(Action::OpenWith(e.location.clone()));
     }
-    if search_active(app, p) && let Some(parent) = e.location.parent() {
-        if ui.button(t("show_in_folder")).clicked() {
-            app.actions.push(Action::ClearSearch(p));
-            app.actions.push(Action::Navigate(p, parent));
-            app.actions.push(Action::Navigate(p, e.location.clone()));
-        }
+    if search_active(app, p)
+        && let Some(parent) = e.location.parent()
+        && ui.button(t("show_in_folder")).clicked()
+    {
+        app.actions.push(Action::ClearSearch(p));
+        app.actions.push(Action::Navigate(p, parent));
+        app.actions.push(Action::Navigate(p, e.location.clone()));
     }
     ui.separator();
     if ui.button(t("copy")).clicked() {
@@ -465,16 +665,28 @@ fn item_menu(app: &mut App, ui: &mut Ui, p: usize, e: &Entry) {
     if ui.button(t("duplicate")).clicked()
         && let Some(parent) = e.location.parent()
     {
-        app.actions.push(Action::Transfer { sources: sel.clone(), dest: parent, mode: crate::ops::Mode::Copy });
+        app.actions.push(Action::Transfer {
+            sources: sel.clone(),
+            dest: parent,
+            mode: crate::ops::Mode::Copy,
+        });
     }
     if app.settings.dual_pane {
         let other = app.tab(1 - p).location().clone();
         if other != Location::Trash {
             if ui.button(t("copy_to_other")).clicked() {
-                app.actions.push(Action::Transfer { sources: sel.clone(), dest: other.clone(), mode: crate::ops::Mode::Copy });
+                app.actions.push(Action::Transfer {
+                    sources: sel.clone(),
+                    dest: other.clone(),
+                    mode: crate::ops::Mode::Copy,
+                });
             }
             if ui.button(t("move_to_other")).clicked() {
-                app.actions.push(Action::Transfer { sources: sel.clone(), dest: other, mode: crate::ops::Mode::Move });
+                app.actions.push(Action::Transfer {
+                    sources: sel.clone(),
+                    dest: other,
+                    mode: crate::ops::Mode::Move,
+                });
             }
         }
     }
@@ -487,15 +699,31 @@ fn item_menu(app: &mut App, ui: &mut Ui, p: usize, e: &Entry) {
             app.actions.push(Action::AskCompress(sel.clone()));
         }
         ui.separator();
-        for f in [archive::ArchiveFormat::Zip, archive::ArchiveFormat::SevenZ, archive::ArchiveFormat::TarGz] {
-            if ui.button(format!("{} .{}", t("compress_as"), f.extension())).clicked()
+        for f in [
+            archive::ArchiveFormat::Zip,
+            archive::ArchiveFormat::SevenZ,
+            archive::ArchiveFormat::TarGz,
+        ] {
+            if ui
+                .button(format!("{} .{}", t("compress_as"), f.extension()))
+                .clicked()
                 && let Some(parent) = e.location.parent()
             {
-                let base = if many { t("archive_name").to_owned() } else { crate::vfs::stem(&e.name).to_owned() };
+                let base = if many {
+                    t("archive_name").to_owned()
+                } else {
+                    crate::vfs::stem(&e.name).to_owned()
+                };
                 let name = format!("{base}.{}", f.extension());
-                let name = crate::ops::unique_name(&name, |n| parent.as_local().is_some_and(|d| d.join(n).exists()));
+                let name = crate::ops::unique_name(&name, |n| {
+                    parent.as_local().is_some_and(|d| d.join(n).exists())
+                });
                 if sel.iter().all(Location::is_local) {
-                    app.actions.push(Action::CompressNow { sources: sel.clone(), dest: parent.join(&name), format: f });
+                    app.actions.push(Action::CompressNow {
+                        sources: sel.clone(),
+                        dest: parent.join(&name),
+                        format: f,
+                    });
                 } else {
                     app.say(t("compress_local_only"));
                 }
@@ -504,10 +732,19 @@ fn item_menu(app: &mut App, ui: &mut Ui, p: usize, e: &Entry) {
     });
     if !e.is_dir() && archive::is_archive(&e.ext) {
         if ui.button(t("extract_here")).clicked() {
-            app.actions.push(Action::Extract { archive: e.location.clone(), into_folder: false });
+            app.actions.push(Action::Extract {
+                archive: e.location.clone(),
+                into_folder: false,
+            });
         }
-        if ui.button(tf("extract_to", archive::folder_name(&e.name))).clicked() {
-            app.actions.push(Action::Extract { archive: e.location.clone(), into_folder: true });
+        if ui
+            .button(tf("extract_to", archive::folder_name(&e.name)))
+            .clicked()
+        {
+            app.actions.push(Action::Extract {
+                archive: e.location.clone(),
+                into_folder: true,
+            });
         }
     }
     ui.separator();
@@ -524,10 +761,8 @@ fn item_menu(app: &mut App, ui: &mut Ui, p: usize, e: &Entry) {
         app.actions.push(Action::Pin(e.location.clone()));
     }
     ui.separator();
-    if e.location.is_local() {
-        if ui.button(t("move_to_trash")).clicked() {
-            app.actions.push(Action::Trash(sel.clone()));
-        }
+    if e.location.is_local() && ui.button(t("move_to_trash")).clicked() {
+        app.actions.push(Action::Trash(sel.clone()));
     }
     if ui.button(t("delete_forever")).clicked() {
         app.actions.push(Action::AskDelete(sel.clone()));
@@ -574,7 +809,10 @@ pub fn background_menu(app: &mut App, ui: &mut Ui, p: usize) {
         }
     });
     ui.menu_button(t("sort_by"), |ui| sort_menu(app, ui));
-    if ui.checkbox(&mut app.settings.show_hidden, t("show_hidden")).changed() {
+    if ui
+        .checkbox(&mut app.settings.show_hidden, t("show_hidden"))
+        .changed()
+    {
         app.mark_dirty();
     }
     ui.separator();
@@ -600,16 +838,25 @@ pub fn sort_menu(app: &mut App, ui: &mut Ui) {
         }
     }
     ui.separator();
-    if ui.radio(!app.settings.sort_descending, t("ascending")).clicked() {
+    if ui
+        .radio(!app.settings.sort_descending, t("ascending"))
+        .clicked()
+    {
         app.settings.sort_descending = false;
         app.mark_dirty();
     }
-    if ui.radio(app.settings.sort_descending, t("descending")).clicked() {
+    if ui
+        .radio(app.settings.sort_descending, t("descending"))
+        .clicked()
+    {
         app.settings.sort_descending = true;
         app.mark_dirty();
     }
     ui.separator();
-    if ui.checkbox(&mut app.settings.folders_first, t("folders_first")).changed() {
+    if ui
+        .checkbox(&mut app.settings.folders_first, t("folders_first"))
+        .changed()
+    {
         app.mark_dirty();
     }
 }
@@ -646,10 +893,20 @@ fn rubber_band(app: &mut App, ui: &Ui, p: usize, bg: &egui::Response, rects: &[(
         ui.data_mut(|d| d.insert_temp(id, (start, base)));
     }
     if bg.dragged() {
-        let Some((start, base)) = ui.data(|d| d.get_temp::<(egui::Pos2, Vec<Location>)>(id)) else { return };
-        let Some(now) = ui.input(|i| i.pointer.interact_pos()) else { return };
+        let Some((start, base)) = ui.data(|d| d.get_temp::<(egui::Pos2, Vec<Location>)>(id)) else {
+            return;
+        };
+        let Some(now) = ui.input(|i| i.pointer.interact_pos()) else {
+            return;
+        };
         let band = Rect::from_two_pos(start, now);
-        ui.painter().rect(band, 2, theme::palette(app.dark).drop, Stroke::new(1.0, theme::ACCENT), StrokeKind::Inside);
+        ui.painter().rect(
+            band,
+            2,
+            theme::palette(app.dark).drop,
+            Stroke::new(1.0, theme::ACCENT),
+            StrokeKind::Inside,
+        );
         let tab = app.tab_mut(p);
         tab.selected = base.into_iter().collect();
         let mut last = None;
@@ -668,12 +925,22 @@ fn rubber_band(app: &mut App, ui: &Ui, p: usize, bg: &egui::Response, rects: &[(
 }
 
 /// Keep the cursor's row visible: the scroll offset that shows rows `top..bottom`.
-fn scroll_offset(app: &mut App, ui: &Ui, p: usize, id: egui::Id, row_top: f32, row_bottom: f32, viewport: f32) -> Option<f32> {
+fn scroll_offset(
+    app: &mut App,
+    ui: &Ui,
+    p: usize,
+    id: egui::Id,
+    row_top: f32,
+    row_bottom: f32,
+    viewport: f32,
+) -> Option<f32> {
     if !app.tab(p).scroll_to_cursor {
         return None;
     }
     app.tab_mut(p).scroll_to_cursor = false;
-    let current = egui::scroll_area::State::load(ui.ctx(), id).map(|s| s.clamped_offset().y).unwrap_or(0.0);
+    let current = egui::scroll_area::State::load(ui.ctx(), id)
+        .map(|s| s.clamped_offset().y)
+        .unwrap_or(0.0);
     if row_top < current {
         Some(row_top)
     } else if row_bottom > current + viewport {
@@ -686,7 +953,11 @@ fn scroll_offset(app: &mut App, ui: &Ui, p: usize, id: egui::Id, row_top: f32, r
 fn selection_fill(app: &App, p: usize, selected: bool, hovered: bool) -> Option<Color32> {
     let pal = theme::palette(app.dark);
     if selected {
-        Some(if app.active_pane == p { pal.selection } else { pal.selection_inactive })
+        Some(if app.active_pane == p {
+            pal.selection
+        } else {
+            pal.selection_inactive
+        })
     } else if hovered {
         Some(pal.hover)
     } else {
@@ -695,18 +966,40 @@ fn selection_fill(app: &App, p: usize, selected: bool, hovered: bool) -> Option<
 }
 
 fn text_color(app: &App, p: usize, selected: bool, ui: &Ui, e: &Entry) -> Color32 {
-    let base = if selected && app.active_pane == p { Color32::WHITE } else { ui.visuals().text_color() };
-    let cut = app.clip.as_ref().is_some_and(|c| c.cut && c.items.contains(&e.location));
-    if e.hidden || cut { base.gamma_multiply(0.55) } else { base }
+    let base = if selected && app.active_pane == p {
+        Color32::WHITE
+    } else {
+        ui.visuals().text_color()
+    };
+    let cut = app
+        .clip
+        .as_ref()
+        .is_some_and(|c| c.cut && c.items.contains(&e.location));
+    if e.hidden || cut {
+        base.gamma_multiply(0.55)
+    } else {
+        base
+    }
 }
 
 fn grid(app: &mut App, ui: &mut Ui, p: usize, mode: ViewMode) {
     let icon = mode.icon_size();
     let small = mode == ViewMode::SmallIcons;
-    let cell = if small { vec2(220.0, 30.0) } else { vec2(icon + 44.0, icon + 46.0) };
+    let cell = if small {
+        vec2(220.0, 30.0)
+    } else {
+        vec2(icon + 44.0, icon + 46.0)
+    };
     let width = ui.available_width() - 16.0;
     let cols = ((width / cell.x).floor() as usize).max(1);
-    let cell = vec2(if small { width / cols as f32 } else { cell.x + (width - cols as f32 * cell.x) / cols as f32 }, cell.y);
+    let cell = vec2(
+        if small {
+            width / cols as f32
+        } else {
+            cell.x + (width - cols as f32 * cell.x) / cols as f32
+        },
+        cell.y,
+    );
     let n = app.tab(p).visible.len();
     let rows_n = n.div_ceil(cols);
     app.columns[p] = cols;
@@ -715,10 +1008,20 @@ fn grid(app: &mut App, ui: &mut Ui, p: usize, mode: ViewMode) {
     let full = ui.available_rect_before_wrap();
     let bg = background(app, ui, p, full);
     let scroll_id = ui.scope_id().with(("grid-scroll", p));
-    let mut area = egui::ScrollArea::vertical().id_salt(("grid-scroll", p)).auto_shrink(false);
+    let mut area = egui::ScrollArea::vertical()
+        .id_salt(("grid-scroll", p))
+        .auto_shrink(false);
     if let Some(c) = app.tab(p).cursor {
         let row = c / cols;
-        if let Some(off) = scroll_offset(app, ui, p, scroll_id, row as f32 * cell.y, (row + 1) as f32 * cell.y + 8.0, viewport) {
+        if let Some(off) = scroll_offset(
+            app,
+            ui,
+            p,
+            scroll_id,
+            row as f32 * cell.y,
+            (row + 1) as f32 * cell.y + 8.0,
+            viewport,
+        ) {
             area = area.vertical_scroll_offset(off);
         }
     }
@@ -731,41 +1034,77 @@ fn grid(app: &mut App, ui: &mut Ui, p: usize, mode: ViewMode) {
                 ui.add_space(8.0);
                 for col in 0..cols {
                     let i = row * cols + col;
-                    let Some(e) = app.tab(p).item(i).cloned() else { break };
+                    let Some(e) = app.tab(p).item(i).cloned() else {
+                        break;
+                    };
                     let (rect, resp) = ui.allocate_exact_size(cell, Sense::click_and_drag());
                     rects.push((i, rect));
                     let selected = app.tab(p).selected.contains(&e.location);
                     let name = display_name(app, &e);
                     if small {
                         if let Some(fill) = selection_fill(app, p, selected, resp.hovered()) {
-                            ui.painter().rect_filled(rect.shrink(1.0), CornerRadius::same(5), fill);
+                            ui.painter()
+                                .rect_filled(rect.shrink(1.0), CornerRadius::same(5), fill);
                         }
-                        let ir = Rect::from_min_size(pos2(rect.left() + 6.0, rect.center().y - 11.0), Vec2::splat(22.0));
+                        let ir = Rect::from_min_size(
+                            pos2(rect.left() + 6.0, rect.center().y - 11.0),
+                            Vec2::splat(22.0),
+                        );
                         entry_icon(app, ui, ir, &e, false);
                         let color = text_color(app, p, selected, ui, &e);
-                        let galley = ui.painter().layout(name, FontId::proportional(13.5), color, rect.width() - 40.0);
-                        ui.painter().galley(pos2(ir.right() + 6.0, rect.center().y - galley.size().y / 2.0), galley, color);
+                        let galley = ui.painter().layout(
+                            name,
+                            FontId::proportional(13.5),
+                            color,
+                            rect.width() - 40.0,
+                        );
+                        ui.painter().galley(
+                            pos2(ir.right() + 6.0, rect.center().y - galley.size().y / 2.0),
+                            galley,
+                            color,
+                        );
                     } else {
-                        let ir = Rect::from_center_size(pos2(rect.center().x, rect.top() + 6.0 + icon / 2.0), Vec2::splat(icon));
+                        let ir = Rect::from_center_size(
+                            pos2(rect.center().x, rect.top() + 6.0 + icon / 2.0),
+                            Vec2::splat(icon),
+                        );
                         if selected || resp.hovered() {
                             let pal = theme::palette(app.dark);
-                            let fill = if selected { pal.selection_inactive } else { pal.hover };
-                            ui.painter().rect_filled(ir.expand(5.0), CornerRadius::same(8), fill);
+                            let fill = if selected {
+                                pal.selection_inactive
+                            } else {
+                                pal.hover
+                            };
+                            ui.painter()
+                                .rect_filled(ir.expand(5.0), CornerRadius::same(8), fill);
                         }
                         entry_icon(app, ui, ir, &e, true);
                         let color = text_color(app, p, selected, ui, &e);
                         let font = FontId::proportional(if icon > 80.0 { 13.0 } else { 12.5 });
-                        let mut job = egui::text::LayoutJob::simple(name, font, if selected && app.active_pane == p { Color32::WHITE } else { color }, rect.width() - 8.0);
+                        let mut job = egui::text::LayoutJob::simple(
+                            name,
+                            font,
+                            if selected && app.active_pane == p {
+                                Color32::WHITE
+                            } else {
+                                color
+                            },
+                            rect.width() - 8.0,
+                        );
                         job.halign = egui::Align::Center;
                         job.wrap.max_rows = 2;
                         job.wrap.break_anywhere = true;
                         let galley = ui.painter().layout_job(job);
-                        let tr = Rect::from_center_size(pos2(rect.center().x, ir.bottom() + 8.0 + galley.size().y / 2.0), galley.size() + vec2(8.0, 2.0));
+                        let tr = Rect::from_center_size(
+                            pos2(rect.center().x, ir.bottom() + 8.0 + galley.size().y / 2.0),
+                            galley.size() + vec2(8.0, 2.0),
+                        );
                         if selected {
                             let fill = selection_fill(app, p, true, false).unwrap_or(theme::ACCENT);
                             ui.painter().rect_filled(tr, CornerRadius::same(4), fill);
                         }
-                        ui.painter().galley(pos2(tr.center().x, tr.top() + 1.0), galley, color);
+                        ui.painter()
+                            .galley(pos2(tr.center().x, tr.top() + 1.0), galley, color);
                     }
                     let resp = resp.on_hover_text_at_pointer(hover_text(&e));
                     item_interact(app, ui, p, i, &resp, &e);
@@ -780,7 +1119,11 @@ fn grid(app: &mut App, ui: &mut Ui, p: usize, mode: ViewMode) {
 fn hover_text(e: &Entry) -> String {
     let mut s = e.name.clone();
     if !e.is_dir() {
-        s.push_str(&format!("\n{} · {}", fileinfo::format_size(e.size), fileinfo::format_date(e.modified)));
+        s.push_str(&format!(
+            "\n{} · {}",
+            fileinfo::format_size(e.size),
+            fileinfo::format_date(e.modified)
+        ));
     }
     s
 }
@@ -795,9 +1138,19 @@ fn rows(app: &mut App, ui: &mut Ui, p: usize, content: bool) {
     let full = ui.available_rect_before_wrap();
     let bg = background(app, ui, p, full);
     let scroll_id = ui.scope_id().with(("rows-scroll", p));
-    let mut area = egui::ScrollArea::vertical().id_salt(("rows-scroll", p)).auto_shrink(false);
+    let mut area = egui::ScrollArea::vertical()
+        .id_salt(("rows-scroll", p))
+        .auto_shrink(false);
     if let Some(c) = app.tab(p).cursor
-        && let Some(off) = scroll_offset(app, ui, p, scroll_id, c as f32 * h, (c + 1) as f32 * h, viewport)
+        && let Some(off) = scroll_offset(
+            app,
+            ui,
+            p,
+            scroll_id,
+            c as f32 * h,
+            (c + 1) as f32 * h,
+            viewport,
+        )
     {
         area = area.vertical_scroll_offset(off);
     }
@@ -807,7 +1160,9 @@ fn rows(app: &mut App, ui: &mut Ui, p: usize, content: bool) {
     area.show_rows(ui, h, n, |ui, range| {
         ui.spacing_mut().item_spacing.y = 0.0;
         for i in range {
-            let Some(e) = app.tab(p).item(i).cloned() else { break };
+            let Some(e) = app.tab(p).item(i).cloned() else {
+                break;
+            };
             let w = ui.available_width();
             let (rect, resp) = ui.allocate_exact_size(vec2(w, h), Sense::click_and_drag());
             rects.push((i, rect));
@@ -817,35 +1172,77 @@ fn rows(app: &mut App, ui: &mut Ui, p: usize, content: bool) {
                 ui.painter().rect_filled(row, CornerRadius::same(6), fill);
             }
             let color = text_color(app, p, selected, ui, &e);
-            let weak = if selected && app.active_pane == p { Color32::from_white_alpha(200) } else { pal.weak };
+            let weak = if selected && app.active_pane == p {
+                Color32::from_white_alpha(200)
+            } else {
+                pal.weak
+            };
             let isz = if content { 40.0 } else { 18.0 };
-            let ir = Rect::from_min_size(pos2(row.left() + 8.0, row.center().y - isz / 2.0), Vec2::splat(isz));
+            let ir = Rect::from_min_size(
+                pos2(row.left() + 8.0, row.center().y - isz / 2.0),
+                Vec2::splat(isz),
+            );
             entry_icon(app, ui, ir, &e, content);
             let x = ir.right() + 10.0;
             let right_w = if content { 180.0 } else { 90.0 };
             let name_w = (row.right() - x - right_w - 8.0).max(40.0);
             let name = display_name(app, &e);
             if content {
-                let g = ui.painter().layout(name, FontId::proportional(14.0), color, name_w);
+                let g = ui
+                    .painter()
+                    .layout(name, FontId::proportional(14.0), color, name_w);
                 ui.painter().galley(pos2(x, row.top() + 8.0), g, color);
                 let sub = if in_search {
-                    e.location.parent().map(|l| l.address(&app.settings.servers)).unwrap_or_default()
+                    e.location
+                        .parent()
+                        .map(|l| l.address(&app.settings.servers))
+                        .unwrap_or_default()
                 } else {
                     fileinfo::kind_label(&e.ext, e.is_dir())
                 };
-                let g = ui.painter().layout(sub, FontId::proportional(12.0), weak, name_w);
+                let g = ui
+                    .painter()
+                    .layout(sub, FontId::proportional(12.0), weak, name_w);
                 ui.painter().galley(pos2(x, row.top() + 29.0), g, weak);
                 let date = fileinfo::format_date(e.modified);
-                ui.painter().text(pos2(row.right() - 10.0, row.top() + 16.0), Align2::RIGHT_CENTER, date, FontId::proportional(12.0), weak);
+                ui.painter().text(
+                    pos2(row.right() - 10.0, row.top() + 16.0),
+                    Align2::RIGHT_CENTER,
+                    date,
+                    FontId::proportional(12.0),
+                    weak,
+                );
                 if !e.is_dir() {
-                    ui.painter().text(pos2(row.right() - 10.0, row.top() + 36.0), Align2::RIGHT_CENTER, fileinfo::format_size(e.size), FontId::proportional(12.0), weak);
+                    ui.painter().text(
+                        pos2(row.right() - 10.0, row.top() + 36.0),
+                        Align2::RIGHT_CENTER,
+                        fileinfo::format_size(e.size),
+                        FontId::proportional(12.0),
+                        weak,
+                    );
                 }
             } else {
-                let g = ui.painter().layout_no_wrap(name, FontId::proportional(13.5), color);
+                let g = ui
+                    .painter()
+                    .layout_no_wrap(name, FontId::proportional(13.5), color);
                 let clip = Rect::from_min_size(pos2(x, row.top()), vec2(name_w, row.height()));
-                ui.painter().with_clip_rect(clip).galley(pos2(x, row.center().y - g.size().y / 2.0), g, color);
-                let right = if e.is_dir() { String::new() } else { fileinfo::format_size(e.size) };
-                ui.painter().text(pos2(row.right() - 10.0, row.center().y), Align2::RIGHT_CENTER, right, FontId::proportional(12.0), weak);
+                ui.painter().with_clip_rect(clip).galley(
+                    pos2(x, row.center().y - g.size().y / 2.0),
+                    g,
+                    color,
+                );
+                let right = if e.is_dir() {
+                    String::new()
+                } else {
+                    fileinfo::format_size(e.size)
+                };
+                ui.painter().text(
+                    pos2(row.right() - 10.0, row.center().y),
+                    Align2::RIGHT_CENTER,
+                    right,
+                    FontId::proportional(12.0),
+                    weak,
+                );
             }
             let resp = resp.on_hover_text_at_pointer(hover_text(&e));
             item_interact(app, ui, p, i, &resp, &e);
@@ -862,13 +1259,24 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
     // columns: name (flex), [folder when searching], modified, kind, size
     let width = ui.available_width();
     let date_w = if app.narrow { 0.0 } else { 150.0 };
-    let kind_w = if app.narrow || width < 700.0 { 0.0 } else { 130.0 };
+    let kind_w = if app.narrow || width < 700.0 {
+        0.0
+    } else {
+        130.0
+    };
     let size_w = 84.0;
-    let folder_w = if in_search && width > 800.0 { 200.0 } else { 0.0 };
+    let folder_w = if in_search && width > 800.0 {
+        200.0
+    } else {
+        0.0
+    };
     let name_w = (width - date_w - kind_w - size_w - folder_w - 40.0).max(120.0);
     // header
     let (hrect, _) = ui.allocate_exact_size(vec2(width, 24.0), Sense::hover());
-    ui.painter().line_segment([hrect.left_bottom(), hrect.right_bottom()], Stroke::new(1.0, pal.separator));
+    ui.painter().line_segment(
+        [hrect.left_bottom(), hrect.right_bottom()],
+        Stroke::new(1.0, pal.separator),
+    );
     let mut x = hrect.left() + 34.0;
     let cols: Vec<(Option<SortKey>, &str, f32, bool)> = vec![
         (Some(SortKey::Name), "col_name", name_w, false),
@@ -888,17 +1296,41 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
         }
         let text = t(label).to_owned();
         let sorted = *key == Some(app.settings.sort);
-        let (pos, align) = if *right { (pos2(r.right() - 10.0, r.center().y), Align2::RIGHT_CENTER) } else { (pos2(r.left() + 4.0, r.center().y), Align2::LEFT_CENTER) };
-        let tr = ui.painter().text(pos, align, text, FontId::proportional(12.0), if sorted { ui.visuals().text_color() } else { pal.weak });
+        let (pos, align) = if *right {
+            (pos2(r.right() - 10.0, r.center().y), Align2::RIGHT_CENTER)
+        } else {
+            (pos2(r.left() + 4.0, r.center().y), Align2::LEFT_CENTER)
+        };
+        let tr = ui.painter().text(
+            pos,
+            align,
+            text,
+            FontId::proportional(12.0),
+            if sorted {
+                ui.visuals().text_color()
+            } else {
+                pal.weak
+            },
+        );
         if sorted {
             // a small chevron after the label (before it for right-aligned columns)
-            let cx = if *right { tr.left() - 9.0 } else { tr.right() + 9.0 };
-            let s = if app.settings.sort_descending { Sym::Up } else { Sym::Up };
+            let cx = if *right {
+                tr.left() - 9.0
+            } else {
+                tr.right() + 9.0
+            };
             let rr = Rect::from_center_size(pos2(cx, r.center().y), Vec2::splat(10.0));
             if app.settings.sort_descending {
-                ui.painter().add(egui::Shape::line(vec![pos2(rr.left(), rr.top() + 3.0), pos2(rr.center().x, rr.bottom() - 2.0), pos2(rr.right(), rr.top() + 3.0)], Stroke::new(1.5, pal.weak)));
+                ui.painter().add(egui::Shape::line(
+                    vec![
+                        pos2(rr.left(), rr.top() + 3.0),
+                        pos2(rr.center().x, rr.bottom() - 2.0),
+                        pos2(rr.right(), rr.top() + 3.0),
+                    ],
+                    Stroke::new(1.5, pal.weak),
+                ));
             } else {
-                icons::sym(ui.painter(), rr, s, pal.weak);
+                icons::sym(ui.painter(), rr, Sym::Up, pal.weak);
             }
         }
         if resp.clicked()
@@ -921,9 +1353,19 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
     let full = ui.available_rect_before_wrap();
     let bg = background(app, ui, p, full);
     let scroll_id = ui.scope_id().with(("details-scroll", p));
-    let mut area = egui::ScrollArea::vertical().id_salt(("details-scroll", p)).auto_shrink(false);
+    let mut area = egui::ScrollArea::vertical()
+        .id_salt(("details-scroll", p))
+        .auto_shrink(false);
     if let Some(c) = app.tab(p).cursor
-        && let Some(off) = scroll_offset(app, ui, p, scroll_id, c as f32 * h, (c + 1) as f32 * h, viewport)
+        && let Some(off) = scroll_offset(
+            app,
+            ui,
+            p,
+            scroll_id,
+            c as f32 * h,
+            (c + 1) as f32 * h,
+            viewport,
+        )
     {
         area = area.vertical_scroll_offset(off);
     }
@@ -931,20 +1373,30 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
     area.show_rows(ui, h, n, |ui, range| {
         ui.spacing_mut().item_spacing.y = 0.0;
         for i in range {
-            let Some(e) = app.tab(p).item(i).cloned() else { break };
+            let Some(e) = app.tab(p).item(i).cloned() else {
+                break;
+            };
             let (rect, resp) = ui.allocate_exact_size(vec2(width, h), Sense::click_and_drag());
             rects.push((i, rect));
             let selected = app.tab(p).selected.contains(&e.location);
             let row = rect.shrink2(vec2(4.0, 0.5));
             if i % 2 == 1 && !selected {
-                ui.painter().rect_filled(row, CornerRadius::same(5), pal.stripe);
+                ui.painter()
+                    .rect_filled(row, CornerRadius::same(5), pal.stripe);
             }
             if let Some(fill) = selection_fill(app, p, selected, resp.hovered()) {
                 ui.painter().rect_filled(row, CornerRadius::same(5), fill);
             }
             let color = text_color(app, p, selected, ui, &e);
-            let weak = if selected && app.active_pane == p { Color32::from_white_alpha(210) } else { pal.weak };
-            let ir = Rect::from_min_size(pos2(row.left() + 8.0, row.center().y - 9.0), Vec2::splat(18.0));
+            let weak = if selected && app.active_pane == p {
+                Color32::from_white_alpha(210)
+            } else {
+                pal.weak
+            };
+            let ir = Rect::from_min_size(
+                pos2(row.left() + 8.0, row.center().y - 9.0),
+                Vec2::splat(18.0),
+            );
             entry_icon(app, ui, ir, &e, false);
             let mut x = rect.left() + 34.0;
             let painter = ui.painter();
@@ -954,16 +1406,43 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
                 }
                 let clip = Rect::from_min_size(pos2(x, row.top()), vec2(w - 8.0, row.height()));
                 let g = painter.layout_no_wrap(text, FontId::proportional(13.0), c);
-                let px = if right { x + w - 10.0 - g.size().x } else { x + 4.0 };
-                painter.with_clip_rect(clip.intersect(painter.clip_rect())).galley(pos2(px, row.center().y - g.size().y / 2.0), g, c);
+                let px = if right {
+                    x + w - 10.0 - g.size().x
+                } else {
+                    x + 4.0
+                };
+                painter
+                    .with_clip_rect(clip.intersect(painter.clip_rect()))
+                    .galley(pos2(px, row.center().y - g.size().y / 2.0), g, c);
                 x += w;
             };
             cell(display_name(app, &e), name_w, false, color);
-            let folder = if folder_w > 0.0 { e.location.parent().map(|l| super::pane::location_title(&l)).unwrap_or_default() } else { String::new() };
+            let folder = if folder_w > 0.0 {
+                e.location
+                    .parent()
+                    .map(|l| super::pane::location_title(&l))
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
             cell(folder, folder_w, false, weak);
             cell(fileinfo::format_date(e.modified), date_w, false, weak);
-            cell(fileinfo::kind_label(&e.ext, e.is_dir()), kind_w, false, weak);
-            cell(if e.is_dir() { "—".to_owned() } else { fileinfo::format_size(e.size) }, size_w, true, weak);
+            cell(
+                fileinfo::kind_label(&e.ext, e.is_dir()),
+                kind_w,
+                false,
+                weak,
+            );
+            cell(
+                if e.is_dir() {
+                    "—".to_owned()
+                } else {
+                    fileinfo::format_size(e.size)
+                },
+                size_w,
+                true,
+                weak,
+            );
             let resp = resp.on_hover_text_at_pointer(hover_text(&e));
             item_interact(app, ui, p, i, &resp, &e);
         }
@@ -974,29 +1453,47 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
 
 /// The dragged items follow the pointer.
 fn drag_ghost(app: &App, ctx: &egui::Context) {
-    let Some(payload) = egui::DragAndDrop::payload::<DragPayload>(ctx) else { return };
-    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return };
+    let Some(payload) = egui::DragAndDrop::payload::<DragPayload>(ctx) else {
+        return;
+    };
+    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else {
+        return;
+    };
     let copy = ctx.input(|i| i.modifiers.command);
-    egui::Area::new(egui::Id::unique("drag-ghost")).fixed_pos(pos + vec2(14.0, 10.0)).order(egui::Order::Tooltip).interactable(false).show(ctx, |ui| {
-        egui::Frame::popup(ui.style()).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                let (r, _) = ui.allocate_exact_size(Vec2::splat(22.0), Sense::hover());
-                icons::folder(ui.painter(), r, theme::ACCENT);
-                let name = payload.items.first().map(Location::name).unwrap_or_default();
-                let text = if payload.items.len() > 1 { tf("n_items_drag", payload.items.len()) } else { name };
-                ui.label(text);
-                if copy {
-                    ui.label(egui::RichText::new("+").strong().color(theme::ACCENT));
-                }
+    egui::Area::new(egui::Id::unique("drag-ghost"))
+        .fixed_pos(pos + vec2(14.0, 10.0))
+        .order(egui::Order::Tooltip)
+        .interactable(false)
+        .show(ctx, |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let (r, _) = ui.allocate_exact_size(Vec2::splat(22.0), Sense::hover());
+                    icons::folder(ui.painter(), r, theme::ACCENT);
+                    let name = payload
+                        .items
+                        .first()
+                        .map(Location::name)
+                        .unwrap_or_default();
+                    let text = if payload.items.len() > 1 {
+                        tf("n_items_drag", payload.items.len())
+                    } else {
+                        name
+                    };
+                    ui.label(text);
+                    if copy {
+                        ui.label(egui::RichText::new("+").strong().color(theme::ACCENT));
+                    }
+                });
             });
         });
-    });
     let _ = app;
 }
 
 /// Space: a big preview over the window (like a desktop's quick look).
 fn quick_look(app: &mut App, ctx: &egui::Context) {
-    let Some(entry) = app.quick_look.clone() else { return };
+    let Some(entry) = app.quick_look.clone() else {
+        return;
+    };
     let screen = ctx.content_rect();
     let mut open = true;
     egui::Window::new(entry.name.clone())
@@ -1006,7 +1503,9 @@ fn quick_look(app: &mut App, ctx: &egui::Context) {
         .default_size(screen.size() * 0.7)
         .default_pos(screen.center() - screen.size() * 0.35)
         .show(ctx, |ui| {
-            egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| super::preview_panel::content(app, ui, &entry, true));
+            egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| {
+                super::preview_panel::content(app, ui, &entry, true)
+            });
         });
     if !open {
         app.quick_look = None;

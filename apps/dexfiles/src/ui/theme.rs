@@ -51,25 +51,55 @@ pub fn palette(dark: bool) -> Palette {
 
 pub fn apply(ctx: &egui::Context, dark: bool) {
     let p = palette(dark);
-    let mut v = if dark { Visuals::dark() } else { Visuals::light() };
+    let mut v = if dark {
+        Visuals::dark()
+    } else {
+        Visuals::light()
+    };
     v.selection.bg_fill = p.selection;
     v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
     v.hyperlink_color = ACCENT;
     v.panel_fill = p.content;
-    v.window_fill = if dark { Color32::from_rgb(0x2a, 0x2b, 0x2f) } else { Color32::WHITE };
+    v.window_fill = if dark {
+        Color32::from_rgb(0x2a, 0x2b, 0x2f)
+    } else {
+        Color32::WHITE
+    };
     v.window_corner_radius = CornerRadius::same(12);
     v.menu_corner_radius = CornerRadius::same(8);
     v.window_stroke = Stroke::new(1.0, p.separator);
-    v.extreme_bg_color = if dark { Color32::from_rgb(0x16, 0x16, 0x18) } else { Color32::from_rgb(0xff, 0xff, 0xff) };
+    v.extreme_bg_color = if dark {
+        Color32::from_rgb(0x16, 0x16, 0x18)
+    } else {
+        Color32::from_rgb(0xff, 0xff, 0xff)
+    };
     v.faint_bg_color = p.stripe;
-    v.text_edit_bg_color = Some(if dark { Color32::from_rgb(0x1f, 0x20, 0x23) } else { Color32::from_rgb(0xf2, 0xf2, 0xf5) });
-    for w in [&mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open, &mut v.widgets.noninteractive] {
+    v.text_edit_bg_color = Some(if dark {
+        Color32::from_rgb(0x1f, 0x20, 0x23)
+    } else {
+        Color32::from_rgb(0xf2, 0xf2, 0xf5)
+    });
+    for w in [
+        &mut v.widgets.inactive,
+        &mut v.widgets.hovered,
+        &mut v.widgets.active,
+        &mut v.widgets.open,
+        &mut v.widgets.noninteractive,
+    ] {
         w.corner_radius = CornerRadius::same(6);
     }
-    v.widgets.inactive.weak_bg_fill = if dark { Color32::from_rgb(0x3a, 0x3b, 0x40) } else { Color32::from_rgb(0xe9, 0xe9, 0xed) };
+    v.widgets.inactive.weak_bg_fill = if dark {
+        Color32::from_rgb(0x3a, 0x3b, 0x40)
+    } else {
+        Color32::from_rgb(0xe9, 0xe9, 0xed)
+    };
     v.widgets.inactive.bg_fill = v.widgets.inactive.weak_bg_fill;
     v.widgets.inactive.bg_stroke = Stroke::NONE;
-    v.widgets.hovered.weak_bg_fill = if dark { Color32::from_rgb(0x48, 0x49, 0x4f) } else { Color32::from_rgb(0xdf, 0xdf, 0xe4) };
+    v.widgets.hovered.weak_bg_fill = if dark {
+        Color32::from_rgb(0x48, 0x49, 0x4f)
+    } else {
+        Color32::from_rgb(0xdf, 0xdf, 0xe4)
+    };
     v.widgets.hovered.bg_stroke = Stroke::NONE;
     v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, p.separator);
     ctx.set_visuals(v);
@@ -79,10 +109,14 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
         s.spacing.interact_size.y = 26.0;
         s.spacing.menu_margin = egui::Margin::same(6);
         s.interaction.selectable_labels = false;
-        s.text_styles.insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
-        s.text_styles.insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
-        s.text_styles.insert(egui::TextStyle::Small, egui::FontId::proportional(11.5));
-        s.text_styles.insert(egui::TextStyle::Heading, egui::FontId::proportional(19.0));
+        s.text_styles
+            .insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
+        s.text_styles
+            .insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
+        s.text_styles
+            .insert(egui::TextStyle::Small, egui::FontId::proportional(11.5));
+        s.text_styles
+            .insert(egui::TextStyle::Heading, egui::FontId::proportional(19.0));
     });
 }
 
@@ -94,16 +128,40 @@ pub fn install_fonts(ctx: &egui::Context) {
     let candidates: &[(&str, &str, bool)] = &[
         ("roboto", "/system/fonts/Roboto-Regular.ttf", true),
         ("noto-cjk", "/system/fonts/NotoSansCJK-Regular.ttc", false),
-        ("droid-fallback", "/system/fonts/DroidSansFallback.ttf", false),
-        ("noto-arabic", "/system/fonts/NotoNaskhArabic-Regular.ttf", false),
-        ("noto-hebrew", "/system/fonts/NotoSansHebrew-Regular.ttf", false),
-        ("noto-devanagari", "/system/fonts/NotoSansDevanagari-Regular.otf", false),
+        (
+            "droid-fallback",
+            "/system/fonts/DroidSansFallback.ttf",
+            false,
+        ),
+        (
+            "noto-arabic",
+            "/system/fonts/NotoNaskhArabic-Regular.ttf",
+            false,
+        ),
+        (
+            "noto-hebrew",
+            "/system/fonts/NotoSansHebrew-Regular.ttf",
+            false,
+        ),
+        (
+            "noto-devanagari",
+            "/system/fonts/NotoSansDevanagari-Regular.otf",
+            false,
+        ),
         ("noto-thai", "/system/fonts/NotoSansThai-Regular.ttf", false),
-        ("noto-cjk-linux", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", false),
+        (
+            "noto-cjk-linux",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            false,
+        ),
     ];
     for (name, path, primary) in candidates {
-        let Ok(bytes) = std::fs::read(path) else { continue };
-        fonts.font_data.insert((*name).to_owned(), egui::FontData::from_owned(bytes).into());
+        let Ok(bytes) = std::fs::read(path) else {
+            continue;
+        };
+        fonts
+            .font_data
+            .insert((*name).to_owned(), egui::FontData::from_owned(bytes).into());
         added.push((*name, *primary));
     }
     if added.is_empty() {

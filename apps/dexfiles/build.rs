@@ -13,10 +13,17 @@ fn main() {
         }
         let parts: Vec<&str> = line.split('\t').collect();
         if parts.len() != 3 {
-            println!("cargo:warning=strings.tsv line {}: expected 3 tab-separated fields", n + 1);
+            println!(
+                "cargo:warning=strings.tsv line {}: expected 3 tab-separated fields",
+                n + 1
+            );
             continue;
         }
-        rows.push((parts[0].to_owned(), parts[1].to_owned(), parts[2].to_owned()));
+        rows.push((
+            parts[0].to_owned(),
+            parts[1].to_owned(),
+            parts[2].to_owned(),
+        ));
     }
     rows.sort_by(|a, b| a.0.cmp(&b.0));
     rows.dedup_by(|a, b| {
@@ -27,7 +34,12 @@ fn main() {
     });
     let mut out = String::from("[\n");
     for (k, en, es) in rows {
-        let _ = writeln!(out, "    ({k:?}, {en:?}, {es:?}),", en = en.replace("\\n", "\n"), es = es.replace("\\n", "\n"));
+        let _ = writeln!(
+            out,
+            "    ({k:?}, {en:?}, {es:?}),",
+            en = en.replace("\\n", "\n"),
+            es = es.replace("\\n", "\n")
+        );
     }
     out.push(']');
     let dir = std::env::var("OUT_DIR").unwrap_or_else(|_| ".".into());

@@ -20,7 +20,14 @@ pub enum ArchiveFormat {
 }
 
 impl ArchiveFormat {
-    pub const ALL: [ArchiveFormat; 6] = [ArchiveFormat::Zip, ArchiveFormat::SevenZ, ArchiveFormat::TarGz, ArchiveFormat::TarXz, ArchiveFormat::TarBz2, ArchiveFormat::Tar];
+    pub const ALL: [ArchiveFormat; 6] = [
+        ArchiveFormat::Zip,
+        ArchiveFormat::SevenZ,
+        ArchiveFormat::TarGz,
+        ArchiveFormat::TarXz,
+        ArchiveFormat::TarBz2,
+        ArchiveFormat::Tar,
+    ];
 
     pub fn extension(self) -> &'static str {
         match self {
@@ -47,7 +54,25 @@ impl ArchiveFormat {
 
 /// What can be extracted, by extension (as [`vfs::extension`] gives it).
 pub fn is_archive(ext: &str) -> bool {
-    matches!(ext, "zip" | "7z" | "tar" | "tar.gz" | "tgz" | "tar.bz2" | "tbz2" | "tar.xz" | "txz" | "gz" | "bz2" | "xz" | "jar" | "apk" | "cbz" | "epub")
+    matches!(
+        ext,
+        "zip"
+            | "7z"
+            | "tar"
+            | "tar.gz"
+            | "tgz"
+            | "tar.bz2"
+            | "tbz2"
+            | "tar.xz"
+            | "txz"
+            | "gz"
+            | "bz2"
+            | "xz"
+            | "jar"
+            | "apk"
+            | "cbz"
+            | "epub"
+    )
 }
 
 /// Done bytes, total bytes, current name; `false` cancels.
@@ -56,14 +81,22 @@ pub type Progress<'a> = &'a mut dyn FnMut(u64, u64, &str) -> bool;
 /// Files under `sources`, with their names inside the archive.
 fn collect(sources: &[PathBuf]) -> io::Result<Vec<(PathBuf, String, bool, u64)>> {
     let mut out = Vec::new();
-    fn walk(path: &Path, name: String, out: &mut Vec<(PathBuf, String, bool, u64)>) -> io::Result<()> {
+    fn walk(
+        path: &Path,
+        name: String,
+        out: &mut Vec<(PathBuf, String, bool, u64)>,
+    ) -> io::Result<()> {
         let meta = std::fs::symlink_metadata(path)?;
         if meta.is_dir() {
             out.push((path.to_path_buf(), name.clone(), true, 0));
             let mut children: Vec<_> = std::fs::read_dir(path)?.flatten().collect();
             children.sort_by_key(|c| c.file_name());
             for c in children {
-                walk(&c.path(), format!("{name}/{}", c.file_name().to_string_lossy()), out)?;
+                walk(
+                    &c.path(),
+                    format!("{name}/{}", c.file_name().to_string_lossy()),
+                    out,
+                )?;
             }
         } else if meta.is_file() {
             out.push((path.to_path_buf(), name, false, meta.len()));
@@ -71,7 +104,10 @@ fn collect(sources: &[PathBuf]) -> io::Result<Vec<(PathBuf, String, bool, u64)>>
         Ok(())
     }
     for s in sources {
-        let name = s.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "root".into());
+        let name = s
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "root".into());
         walk(s, name, &mut out)?;
     }
     Ok(out)
@@ -122,7 +158,12 @@ fn serr(e: sevenz_rust2::Error) -> io::Error {
 }
 
 /// Compress `sources` into the new archive `target`.
-pub fn compress(sources: &[PathBuf], target: &Path, format: ArchiveFormat, mut progress: Progress<'_>) -> io::Result<()> {
+pub fn compress(
+    sources: &[PathBuf],
+    target: &Path,
+    format: ArchiveFormat,
+    mut progress: Progress<'_>,
+) -> io::Result<()> {
     let items = collect(sources)?;
     let total: u64 = items.iter().map(|i| i.3).sum();
     let mut done = 0u64;
@@ -130,15 +171,24 @@ pub fn compress(sources: &[PathBuf], target: &Path, format: ArchiveFormat, mut p
         ArchiveFormat::Zip => {
             let mut zip = zip::ZipWriter::new(BufWriter::new(File::create(target)?));
             for (path, name, is_dir, _) in &items {
-                let mut options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated).large_file(true);
+                let mut options = zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Deflated)
+                    .large_file(true);
                 if let Some(t) = zip_time(path) {
                     options = options.last_modified_time(t);
                 }
                 if *is_dir {
-                    zip.add_directory(format!("{name}/"), options).map_err(zerr)?;
+                    zip.add_directory(format!("{name}/"), options)
+                        .map_err(zerr)?;
                 } else {
                     zip.start_file(name.clone(), options).map_err(zerr)?;
-                    let mut r = ProgressReader { inner: File::open(path)?, done: &mut done, total, name, progress: &mut progress };
+                    let mut r = ProgressReader {
+                        inner: File::open(path)?,
+                        done: &mut done,
+                        total,
+                        name,
+                        progress: &mut progress,
+                    };
                     io::copy(&mut r, &mut zip)?;
                 }
             }
@@ -151,18 +201,36 @@ pub fn compress(sources: &[PathBuf], target: &Path, format: ArchiveFormat, mut p
                 if *is_dir {
                     sz.push_archive_entry::<File>(entry, None).map_err(serr)?;
                 } else {
-                    let r = ProgressReader { inner: File::open(path)?, done: &mut done, total, name, progress: &mut progress };
+                    let r = ProgressReader {
+                        inner: File::open(path)?,
+                        done: &mut done,
+                        total,
+                        name,
+                        progress: &mut progress,
+                    };
                     sz.push_archive_entry(entry, Some(r)).map_err(serr)?;
                 }
             }
             sz.finish()?;
         }
-        ArchiveFormat::Tar | ArchiveFormat::TarGz | ArchiveFormat::TarBz2 | ArchiveFormat::TarXz => {
+        ArchiveFormat::Tar
+        | ArchiveFormat::TarGz
+        | ArchiveFormat::TarBz2
+        | ArchiveFormat::TarXz => {
             let file = BufWriter::new(File::create(target)?);
             let out: Box<dyn Write> = match format {
-                ArchiveFormat::TarGz => Box::new(flate2::write::GzEncoder::new(file, flate2::Compression::default())),
-                ArchiveFormat::TarBz2 => Box::new(bzip2::write::BzEncoder::new(file, bzip2::Compression::default())),
-                ArchiveFormat::TarXz => Box::new(lzma_rust2::XzWriter::new(file, lzma_rust2::XzOptions::with_preset(6)).map_err(vfs::other)?),
+                ArchiveFormat::TarGz => Box::new(flate2::write::GzEncoder::new(
+                    file,
+                    flate2::Compression::default(),
+                )),
+                ArchiveFormat::TarBz2 => Box::new(bzip2::write::BzEncoder::new(
+                    file,
+                    bzip2::Compression::default(),
+                )),
+                ArchiveFormat::TarXz => Box::new(
+                    lzma_rust2::XzWriter::new(file, lzma_rust2::XzOptions::with_preset(6))
+                        .map_err(vfs::other)?,
+                ),
                 _ => Box::new(file),
             };
             let mut tar = tar::Builder::new(out);
@@ -175,7 +243,13 @@ pub fn compress(sources: &[PathBuf], target: &Path, format: ArchiveFormat, mut p
                     header.set_metadata(&std::fs::metadata(path)?);
                     header.set_size(*size);
                     header.set_cksum();
-                    let r = ProgressReader { inner: File::open(path)?, done: &mut done, total, name, progress: &mut progress };
+                    let r = ProgressReader {
+                        inner: File::open(path)?,
+                        done: &mut done,
+                        total,
+                        name,
+                        progress: &mut progress,
+                    };
                     tar.append_data(&mut header, name, r)?;
                 }
             }
@@ -215,7 +289,12 @@ pub struct ArchiveItem {
 }
 
 fn kind_of(path: &Path) -> String {
-    vfs::extension(&path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
+    vfs::extension(
+        &path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+    )
 }
 
 /// The entries of a local archive (up to `limit`).
@@ -234,7 +313,11 @@ pub fn list(path: &Path, limit: usize) -> io::Result<(Vec<ArchiveItem>, usize)> 
             let mut zip = zip::ZipArchive::new(BufReader::new(File::open(path)?)).map_err(zerr)?;
             for i in 0..zip.len() {
                 let f = zip.by_index_raw(i).map_err(zerr)?;
-                push(f.name().map(|n| n.into_owned()).unwrap_or_default(), f.size(), f.is_dir());
+                push(
+                    f.name().map(|n| n.into_owned()).unwrap_or_default(),
+                    f.size(),
+                    f.is_dir(),
+                );
             }
         }
         "7z" => {
@@ -247,12 +330,18 @@ pub fn list(path: &Path, limit: usize) -> io::Result<(Vec<ArchiveItem>, usize)> 
             let mut tar = tar::Archive::new(decoder(path, &ext)?);
             for e in tar.entries()? {
                 let e = e?;
-                let name = e.path().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+                let name = e
+                    .path()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_default();
                 push(name, e.size(), e.header().entry_type().is_dir());
             }
         }
         "gz" | "bz2" | "xz" => {
-            let name = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let name = path
+                .file_stem()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
             push(name, 0, false);
         }
         _ => return Err(vfs::other("not an archive")),
@@ -279,11 +368,18 @@ pub fn extract(path: &Path, dest: &Path, mut progress: Progress<'_>) -> io::Resu
     match ext.as_str() {
         "zip" | "jar" | "apk" | "cbz" | "epub" => {
             let mut zip = zip::ZipArchive::new(BufReader::new(File::open(path)?)).map_err(zerr)?;
-            let total: u64 = (0..zip.len()).filter_map(|i| zip.by_index_raw(i).ok().map(|f| f.size())).sum();
+            let total: u64 = (0..zip.len())
+                .filter_map(|i| zip.by_index_raw(i).ok().map(|f| f.size()))
+                .sum();
             for i in 0..zip.len() {
                 let mut f = zip.by_index(i).map_err(zerr)?;
                 let name = f.name().map(|n| n.into_owned()).unwrap_or_default();
-                let Some(out) = f.enclosed_name().and_then(|n| safe_join(dest, &n.to_string_lossy())) else { continue };
+                let Some(out) = f
+                    .enclosed_name()
+                    .and_then(|n| safe_join(dest, &n.to_string_lossy()))
+                else {
+                    continue;
+                };
                 if f.is_dir() {
                     std::fs::create_dir_all(&out)?;
                     continue;
@@ -292,44 +388,76 @@ pub fn extract(path: &Path, dest: &Path, mut progress: Progress<'_>) -> io::Resu
                     std::fs::create_dir_all(p)?;
                 }
                 let mut w = BufWriter::new(File::create(&out)?);
-                let mut r = ProgressReader { inner: &mut f, done: &mut done, total, name: &name, progress: &mut progress };
+                let mut r = ProgressReader {
+                    inner: &mut f,
+                    done: &mut done,
+                    total,
+                    name: &name,
+                    progress: &mut progress,
+                };
                 io::copy(&mut r, &mut w)?;
                 w.flush()?;
             }
         }
         "7z" => {
             let mut failure: Option<io::Error> = None;
-            let total = sevenz_rust2::Archive::open(path).map(|a| a.files.iter().map(|f| f.size()).sum()).unwrap_or(total);
-            let r = sevenz_rust2::decompress_file_with_extract_fn(path, dest, |entry, reader, _suggested| {
-                let Some(out) = safe_join(dest, entry.name()) else { return Ok(true) };
-                if entry.is_directory() {
-                    std::fs::create_dir_all(&out)?;
-                    return Ok(true);
-                }
-                if let Some(p) = out.parent() {
-                    std::fs::create_dir_all(p)?;
-                }
-                let mut w = BufWriter::new(File::create(&out)?);
-                let mut pr = ProgressReader { inner: reader, done: &mut done, total, name: entry.name(), progress: &mut progress };
-                match io::copy(&mut pr, &mut w) {
-                    Ok(_) => Ok(true),
-                    Err(e) => {
-                        failure = Some(e);
-                        Ok(false)
+            let total = sevenz_rust2::Archive::open(path)
+                .map(|a| a.files.iter().map(|f| f.size()).sum())
+                .unwrap_or(total);
+            let r = sevenz_rust2::decompress_file_with_extract_fn(
+                path,
+                dest,
+                |entry, reader, _suggested| {
+                    let Some(out) = safe_join(dest, entry.name()) else {
+                        return Ok(true);
+                    };
+                    if entry.is_directory() {
+                        std::fs::create_dir_all(&out)?;
+                        return Ok(true);
                     }
-                }
-            });
+                    if let Some(p) = out.parent() {
+                        std::fs::create_dir_all(p)?;
+                    }
+                    let mut w = BufWriter::new(File::create(&out)?);
+                    let mut pr = ProgressReader {
+                        inner: reader,
+                        done: &mut done,
+                        total,
+                        name: entry.name(),
+                        progress: &mut progress,
+                    };
+                    match io::copy(&mut pr, &mut w) {
+                        Ok(_) => Ok(true),
+                        Err(e) => {
+                            failure = Some(e);
+                            Ok(false)
+                        }
+                    }
+                },
+            );
             if let Some(e) = failure {
                 return Err(e);
             }
             r.map_err(serr)?;
         }
         "tar" | "tar.gz" | "tgz" | "tar.bz2" | "tbz2" | "tar.xz" | "txz" => {
-            let counting = ProgressReader { inner: File::open(path)?, done: &mut done, total, name: "", progress: &mut progress };
+            let counting = ProgressReader {
+                inner: File::open(path)?,
+                done: &mut done,
+                total,
+                name: "",
+                progress: &mut progress,
+            };
             let reader: Box<dyn Read> = match ext.as_str() {
-                "tar.gz" | "tgz" => Box::new(flate2::read::MultiGzDecoder::new(BufReader::new(counting))),
-                "tar.bz2" | "tbz2" => Box::new(bzip2::read::MultiBzDecoder::new(BufReader::new(counting))),
-                "tar.xz" | "txz" => Box::new(lzma_rust2::XzReader::new(BufReader::new(counting), true)),
+                "tar.gz" | "tgz" => {
+                    Box::new(flate2::read::MultiGzDecoder::new(BufReader::new(counting)))
+                }
+                "tar.bz2" | "tbz2" => {
+                    Box::new(bzip2::read::MultiBzDecoder::new(BufReader::new(counting)))
+                }
+                "tar.xz" | "txz" => {
+                    Box::new(lzma_rust2::XzReader::new(BufReader::new(counting), true))
+                }
                 _ => Box::new(counting),
             };
             let mut tar = tar::Archive::new(reader);
@@ -341,8 +469,17 @@ pub fn extract(path: &Path, dest: &Path, mut progress: Progress<'_>) -> io::Resu
             }
         }
         "gz" | "bz2" | "xz" => {
-            let name = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
-            let counting = ProgressReader { inner: File::open(path)?, done: &mut done, total, name: &name, progress: &mut progress };
+            let name = path
+                .file_stem()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "file".into());
+            let counting = ProgressReader {
+                inner: File::open(path)?,
+                done: &mut done,
+                total,
+                name: &name,
+                progress: &mut progress,
+            };
             let mut reader: Box<dyn Read> = match ext.as_str() {
                 "gz" => Box::new(flate2::read::MultiGzDecoder::new(BufReader::new(counting))),
                 "bz2" => Box::new(bzip2::read::MultiBzDecoder::new(BufReader::new(counting))),
@@ -360,7 +497,11 @@ pub fn extract(path: &Path, dest: &Path, mut progress: Progress<'_>) -> io::Resu
 /// A folder name to extract `archive_name` into ("photos.tar.gz" → "photos").
 pub fn folder_name(archive_name: &str) -> String {
     let stem = vfs::stem(archive_name);
-    if stem.is_empty() { "archive".to_owned() } else { stem.to_owned() }
+    if stem.is_empty() {
+        "archive".to_owned()
+    } else {
+        stem.to_owned()
+    }
 }
 
 #[cfg(test)]
@@ -376,20 +517,41 @@ mod tests {
         std::fs::write(src.join("inner/b.bin"), vec![3u8; 70_000]).unwrap_or_default();
         for format in ArchiveFormat::ALL {
             let archive = root.path().join(format!("out.{}", format.extension()));
-            compress(&[src.clone()], &archive, format, &mut |_, _, _| true).unwrap_or_else(|e| unreachable!("{format:?}: {e}"));
-            let (items, count) = list(&archive, 100).unwrap_or_else(|e| unreachable!("{format:?}: {e}"));
+            compress(
+                std::slice::from_ref(&src),
+                &archive,
+                format,
+                &mut |_, _, _| true,
+            )
+            .unwrap_or_else(|e| unreachable!("{format:?}: {e}"));
+            let (items, count) =
+                list(&archive, 100).unwrap_or_else(|e| unreachable!("{format:?}: {e}"));
             assert!(count >= 2, "{format:?}: {items:?}");
             let dest = root.path().join(format!("x-{}", format.extension()));
-            extract(&archive, &dest, &mut |_, _, _| true).unwrap_or_else(|e| unreachable!("{format:?}: {e}"));
-            assert_eq!(std::fs::read(dest.join("docs/a.txt")).unwrap_or_default(), b"alpha", "{format:?}");
-            assert_eq!(std::fs::read(dest.join("docs/inner/b.bin")).map(|v| v.len()).unwrap_or(0), 70_000, "{format:?}");
+            extract(&archive, &dest, &mut |_, _, _| true)
+                .unwrap_or_else(|e| unreachable!("{format:?}: {e}"));
+            assert_eq!(
+                std::fs::read(dest.join("docs/a.txt")).unwrap_or_default(),
+                b"alpha",
+                "{format:?}"
+            );
+            assert_eq!(
+                std::fs::read(dest.join("docs/inner/b.bin"))
+                    .map(|v| v.len())
+                    .unwrap_or(0),
+                70_000,
+                "{format:?}"
+            );
         }
     }
 
     #[test]
     fn unsafe_names_are_refused() {
         let d = Path::new("/tmp/x");
-        assert_eq!(safe_join(d, "a/b.txt"), Some(PathBuf::from("/tmp/x/a/b.txt")));
+        assert_eq!(
+            safe_join(d, "a/b.txt"),
+            Some(PathBuf::from("/tmp/x/a/b.txt"))
+        );
         assert_eq!(safe_join(d, "../evil"), None);
         assert_eq!(safe_join(d, "/etc/passwd"), None);
         assert_eq!(folder_name("photos.tar.gz"), "photos");

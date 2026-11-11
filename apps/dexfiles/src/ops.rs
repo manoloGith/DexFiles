@@ -7,9 +7,9 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
-use std::time::Instant;
 #[cfg(test)]
 use std::time::Duration;
+use std::time::Instant;
 
 use crate::archive::ArchiveFormat;
 use crate::trash::TrashInfo;
@@ -31,17 +31,43 @@ pub enum Conflict {
 
 #[derive(Clone, Debug)]
 pub enum JobKind {
-    Transfer { sources: Vec<Location>, dest: Location, mode: Mode },
-    Delete { items: Vec<Location> },
-    Trash { items: Vec<PathBuf> },
-    Restore { items: Vec<TrashInfo> },
-    Purge { items: Vec<TrashInfo> },
+    Transfer {
+        sources: Vec<Location>,
+        dest: Location,
+        mode: Mode,
+    },
+    Delete {
+        items: Vec<Location>,
+    },
+    Trash {
+        items: Vec<PathBuf>,
+    },
+    Restore {
+        items: Vec<TrashInfo>,
+    },
+    Purge {
+        items: Vec<TrashInfo>,
+    },
     EmptyTrash,
-    Compress { sources: Vec<Location>, dest: Location, format: ArchiveFormat },
-    Extract { archive: Location, dest: Location },
-    Mkdir { location: Location },
-    NewFile { location: Location },
-    Rename { from: Location, to: Location },
+    Compress {
+        sources: Vec<Location>,
+        dest: Location,
+        format: ArchiveFormat,
+    },
+    Extract {
+        archive: Location,
+        dest: Location,
+    },
+    Mkdir {
+        location: Location,
+    },
+    NewFile {
+        location: Location,
+    },
+    Rename {
+        from: Location,
+        to: Location,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -93,18 +119,27 @@ pub struct Job {
 
 impl JobState {
     pub fn status(&self) -> Status {
-        self.status.lock().unwrap_or_else(PoisonError::into_inner).clone()
+        self.status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     pub fn cancel(&self) {
         self.cancel.store(true, Ordering::SeqCst);
         // A job waiting for an answer stops too.
-        *self.answer.lock().unwrap_or_else(PoisonError::into_inner) = Some(Answer { conflict: Conflict::Skip, apply_to_all: true });
+        *self.answer.lock().unwrap_or_else(PoisonError::into_inner) = Some(Answer {
+            conflict: Conflict::Skip,
+            apply_to_all: true,
+        });
         self.answered.notify_all();
     }
 
     pub fn answer(&self, answer: Answer) {
-        self.status.lock().unwrap_or_else(PoisonError::into_inner).question = None;
+        self.status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .question = None;
         *self.answer.lock().unwrap_or_else(PoisonError::into_inner) = Some(answer);
         self.answered.notify_all();
     }
@@ -147,21 +182,33 @@ impl JobState {
         self.ctx.request_repaint();
         let mut answer = self.answer.lock().unwrap_or_else(PoisonError::into_inner);
         while answer.is_none() {
-            answer = self.answered.wait(answer).unwrap_or_else(PoisonError::into_inner);
+            answer = self
+                .answered
+                .wait(answer)
+                .unwrap_or_else(PoisonError::into_inner);
         }
-        answer.unwrap_or(Answer { conflict: Conflict::Skip, apply_to_all: false })
+        answer.unwrap_or(Answer {
+            conflict: Conflict::Skip,
+            apply_to_all: false,
+        })
     }
 }
 
 fn epoch_ms() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| u64::try_from(d.as_millis()).unwrap_or(0)).unwrap_or(0)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| u64::try_from(d.as_millis()).unwrap_or(0))
+        .unwrap_or(0)
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Start a job on its own thread.
 pub fn start(ctx: &egui::Context, kind: JobKind) -> Job {
-    let visible = !matches!(kind, JobKind::Mkdir { .. } | JobKind::NewFile { .. } | JobKind::Rename { .. });
+    let visible = !matches!(
+        kind,
+        JobKind::Mkdir { .. } | JobKind::NewFile { .. } | JobKind::Rename { .. }
+    );
     let state = Arc::new(JobState {
         cancel: AtomicBool::new(false),
         status: Mutex::new(Status::default()),
@@ -170,17 +217,25 @@ pub fn start(ctx: &egui::Context, kind: JobKind) -> Job {
         ctx: ctx.clone(),
         last_repaint: AtomicU64::new(0),
     });
-    let job = Job { id: NEXT_ID.fetch_add(1, Ordering::Relaxed), kind: kind.clone(), state: state.clone(), started: Instant::now(), visible };
-    let spawned = std::thread::Builder::new().name("dexfiles-job".into()).spawn(move || {
-        run(&state, kind);
-        let cancelled = state.cancelled();
-        state.update(|s| {
-            s.finished = true;
-            s.cancelled = cancelled;
-            s.current.clear();
+    let job = Job {
+        id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+        kind: kind.clone(),
+        state: state.clone(),
+        started: Instant::now(),
+        visible,
+    };
+    let spawned = std::thread::Builder::new()
+        .name("dexfiles-job".into())
+        .spawn(move || {
+            run(&state, kind);
+            let cancelled = state.cancelled();
+            state.update(|s| {
+                s.finished = true;
+                s.cancelled = cancelled;
+                s.current.clear();
+            });
+            state.ctx.request_repaint();
         });
-        state.ctx.request_repaint();
-    });
     if let Err(e) = spawned {
         job.state.update(|s| {
             s.errors.push(e.to_string());
@@ -192,7 +247,11 @@ pub fn start(ctx: &egui::Context, kind: JobKind) -> Job {
 
 fn run(state: &JobState, kind: JobKind) {
     match kind {
-        JobKind::Transfer { sources, dest, mode } => transfer(state, &sources, &dest, mode),
+        JobKind::Transfer {
+            sources,
+            dest,
+            mode,
+        } => transfer(state, &sources, &dest, mode),
         JobKind::Delete { items } => {
             state.update(|s| s.total_items = items.len() as u64);
             for item in items {
@@ -201,10 +260,10 @@ fn run(state: &JobState, kind: JobKind) {
                 }
                 state.update(|s| s.current = item.name());
                 let r = vfs::fs_for(&item).and_then(|fs| delete_tree(state, fs.as_ref(), &item));
-                if let Err(e) = r {
-                    if !vfs::is_cancelled(&e) {
-                        state.error(&item.name(), &e);
-                    }
+                if let Err(e) = r
+                    && !vfs::is_cancelled(&e)
+                {
+                    state.error(&item.name(), &e);
                 }
                 state.touch(item.parent());
                 state.update(|s| s.done_items += 1);
@@ -216,7 +275,10 @@ fn run(state: &JobState, kind: JobKind) {
                 if state.cancelled() {
                     break;
                 }
-                let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                let name = p
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
                 state.update(|s| s.current = name.clone());
                 if let Err(e) = crate::trash::trash(&p) {
                     state.error(&name, &e);
@@ -256,12 +318,23 @@ fn run(state: &JobState, kind: JobKind) {
             }
             state.touch(Some(Location::Trash));
         }
-        JobKind::Compress { sources, dest, format } => {
-            let (Some(target), true) = (dest.as_local(), sources.iter().all(Location::is_local)) else {
-                state.error("compress", &vfs::other("only local files can be compressed"));
+        JobKind::Compress {
+            sources,
+            dest,
+            format,
+        } => {
+            let (Some(target), true) = (dest.as_local(), sources.iter().all(Location::is_local))
+            else {
+                state.error(
+                    "compress",
+                    &vfs::other("only local files can be compressed"),
+                );
                 return;
             };
-            let paths: Vec<PathBuf> = sources.iter().filter_map(|l| l.as_local().map(PathBuf::from)).collect();
+            let paths: Vec<PathBuf> = sources
+                .iter()
+                .filter_map(|l| l.as_local().map(PathBuf::from))
+                .collect();
             let r = crate::archive::compress(&paths, target, format, &mut |done, total, name| {
                 state.update(|s| {
                     s.done_bytes = done;
@@ -287,7 +360,10 @@ fn run(state: &JobState, kind: JobKind) {
                 Err(e) => return state.error(&archive.name(), &e),
             };
             let Some(target) = dest.as_local() else {
-                state.error("extract", &vfs::other("archives are extracted to local folders"));
+                state.error(
+                    "extract",
+                    &vfs::other("archives are extracted to local folders"),
+                );
                 return;
             };
             let r = crate::archive::extract(&local, target, &mut |done, total, name| {
@@ -316,7 +392,9 @@ fn run(state: &JobState, kind: JobKind) {
             state.touch(location.parent());
         }
         JobKind::NewFile { location } => {
-            let r = vfs::fs_for(&location).and_then(|fs| fs.write_from(&location.backend_path(), &mut io::empty(), 0, &mut |_| true));
+            let r = vfs::fs_for(&location).and_then(|fs| {
+                fs.write_from(&location.backend_path(), &mut io::empty(), 0, &mut |_| true)
+            });
             match r {
                 Ok(_) => state.update(|s| s.created.push(location.clone())),
                 Err(e) => state.error(&location.name(), &e),
@@ -325,8 +403,13 @@ fn run(state: &JobState, kind: JobKind) {
         }
         JobKind::Rename { from, to } => {
             let r = vfs::fs_for(&from).and_then(|fs| {
-                if exists(fs.as_ref(), &to) && from.name().to_lowercase() != to.name().to_lowercase() {
-                    return Err(io::Error::new(io::ErrorKind::AlreadyExists, "the name is taken"));
+                if exists(fs.as_ref(), &to)
+                    && from.name().to_lowercase() != to.name().to_lowercase()
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        "the name is taken",
+                    ));
                 }
                 fs.rename(&from.backend_path(), &to.backend_path())
             });
@@ -354,7 +437,11 @@ pub fn unique_name(name: &str, taken: impl Fn(&str) -> bool) -> String {
     let stem = vfs::stem(name);
     let ext = vfs::extension(name);
     for n in 2..10_000 {
-        let candidate = if ext.is_empty() { format!("{stem} ({n})") } else { format!("{stem} ({n}).{ext}") };
+        let candidate = if ext.is_empty() {
+            format!("{stem} ({n})")
+        } else {
+            format!("{stem} ({n}).{ext}")
+        };
         if !taken(&candidate) {
             return candidate;
         }
@@ -363,7 +450,14 @@ pub fn unique_name(name: &str, taken: impl Fn(&str) -> bool) -> String {
 }
 
 /// Total bytes and items under the sources (for the progress bar).
-fn measure(state: &JobState, fs: &dyn Fs, loc: &Location, kind: Kind, size: u64, totals: &mut (u64, u64)) {
+fn measure(
+    state: &JobState,
+    fs: &dyn Fs,
+    loc: &Location,
+    kind: Kind,
+    size: u64,
+    totals: &mut (u64, u64),
+) {
     totals.1 += 1;
     if kind != Kind::Dir {
         totals.0 += size;
@@ -410,7 +504,14 @@ fn transfer(state: &JobState, sources: &[Location], dest: &Location, mode: Mode)
         };
         // A move that is a rename needs no measuring.
         if !(mode == Mode::Move && quick_move_possible(src, dest)) {
-            measure(state, src_fs.as_ref(), src, entry.kind, entry.size, &mut totals);
+            measure(
+                state,
+                src_fs.as_ref(),
+                src,
+                entry.kind,
+                entry.size,
+                &mut totals,
+            );
         }
         plan.push((src.clone(), src_fs, entry.kind, entry.size));
     }
@@ -427,12 +528,17 @@ fn transfer(state: &JobState, sources: &[Location], dest: &Location, mode: Mode)
         let duplicate = mode == Mode::Copy && src.parent().as_ref() == Some(dest);
         let mut target = dest.join(&name);
         if duplicate {
-            target = dest.join(&unique_name(&name, |n| exists(dst_fs.as_ref(), &dest.join(n))));
+            target = dest.join(&unique_name(&name, |n| {
+                exists(dst_fs.as_ref(), &dest.join(n))
+            }));
         } else if exists(dst_fs.as_ref(), &target) {
             let choice = match policy {
                 Some(p) => p,
                 None => {
-                    let a = state.ask(Question { name: name.clone(), is_dir: kind == Kind::Dir });
+                    let a = state.ask(Question {
+                        name: name.clone(),
+                        is_dir: kind == Kind::Dir,
+                    });
                     if a.apply_to_all {
                         policy = Some(a.conflict);
                     }
@@ -447,20 +553,30 @@ fn transfer(state: &JobState, sources: &[Location], dest: &Location, mode: Mode)
                     state.update(|s| s.done_items += 1);
                     continue;
                 }
-                Conflict::KeepBoth => target = dest.join(&unique_name(&name, |n| exists(dst_fs.as_ref(), &dest.join(n)))),
+                Conflict::KeepBoth => {
+                    target = dest.join(&unique_name(&name, |n| {
+                        exists(dst_fs.as_ref(), &dest.join(n))
+                    }))
+                }
                 Conflict::Replace => {
                     // A folder onto a folder merges; anything else replaces.
-                    let existing_dir = dst_fs.stat(&target.backend_path()).map(|e| e.kind == Kind::Dir).unwrap_or(false);
-                    if !(existing_dir && kind == Kind::Dir) {
-                        if let Err(e) = delete_tree(state, dst_fs.as_ref(), &target) {
-                            state.error(&name, &e);
-                            continue;
-                        }
+                    let existing_dir = dst_fs
+                        .stat(&target.backend_path())
+                        .map(|e| e.kind == Kind::Dir)
+                        .unwrap_or(false);
+                    if !(existing_dir && kind == Kind::Dir)
+                        && let Err(e) = delete_tree(state, dst_fs.as_ref(), &target)
+                    {
+                        state.error(&name, &e);
+                        continue;
                     }
                 }
             }
         }
-        if mode == Mode::Move && quick_move_possible(&src, dest) && !exists(dst_fs.as_ref(), &target) {
+        if mode == Mode::Move
+            && quick_move_possible(&src, dest)
+            && !exists(dst_fs.as_ref(), &target)
+        {
             state.update(|s| s.current = name.clone());
             match src_fs.rename(&src.backend_path(), &target.backend_path()) {
                 Ok(()) => {
@@ -474,7 +590,15 @@ fn transfer(state: &JobState, sources: &[Location], dest: &Location, mode: Mode)
                 Err(e) => log::info!("dexfiles: rename failed ({e}); copying instead"),
             }
         }
-        let r = copy_tree(state, src_fs.as_ref(), &src, kind, size, dst_fs.as_ref(), &target);
+        let r = copy_tree(
+            state,
+            src_fs.as_ref(),
+            &src,
+            kind,
+            size,
+            dst_fs.as_ref(),
+            &target,
+        );
         match r {
             Ok(()) => {
                 state.update(|s| s.created.push(target.clone()));
@@ -490,7 +614,12 @@ fn transfer(state: &JobState, sources: &[Location], dest: &Location, mode: Mode)
         }
     }
     state.touch(Some(dest.clone()));
-    let written: Vec<PathBuf> = state.status().created.iter().filter_map(|l| l.as_local().map(PathBuf::from)).collect();
+    let written: Vec<PathBuf> = state
+        .status()
+        .created
+        .iter()
+        .filter_map(|l| l.as_local().map(PathBuf::from))
+        .collect();
     crate::platform::media_changed(&written);
 }
 
@@ -505,7 +634,15 @@ fn quick_move_possible(src: &Location, dest: &Location) -> bool {
     }
 }
 
-fn copy_tree(state: &JobState, src_fs: &dyn Fs, src: &Location, kind: Kind, size: u64, dst_fs: &dyn Fs, dst: &Location) -> io::Result<()> {
+fn copy_tree(
+    state: &JobState,
+    src_fs: &dyn Fs,
+    src: &Location,
+    kind: Kind,
+    size: u64,
+    dst_fs: &dyn Fs,
+    dst: &Location,
+) -> io::Result<()> {
     if state.cancelled() {
         return Err(vfs::cancelled());
     }
@@ -517,7 +654,15 @@ fn copy_tree(state: &JobState, src_fs: &dyn Fs, src: &Location, kind: Kind, size
         state.update(|s| s.done_items += 1);
         let mut first_error = None;
         for child in src_fs.list(&src.backend_path())? {
-            let r = copy_tree(state, src_fs, &src.join(&child.name), child.kind, child.size, dst_fs, &dst.join(&child.name));
+            let r = copy_tree(
+                state,
+                src_fs,
+                &src.join(&child.name),
+                child.kind,
+                child.size,
+                dst_fs,
+                &dst.join(&child.name),
+            );
             match r {
                 Err(e) if vfs::is_cancelled(&e) => return Err(e),
                 Err(e) => {
@@ -549,7 +694,14 @@ fn copy_tree(state: &JobState, src_fs: &dyn Fs, src: &Location, kind: Kind, size
     Ok(())
 }
 
-fn copy_file(src_fs: &dyn Fs, src: &Location, size: u64, dst_fs: &dyn Fs, dst: &Location, progress: vfs::Progress<'_>) -> io::Result<()> {
+fn copy_file(
+    src_fs: &dyn Fs,
+    src: &Location,
+    size: u64,
+    dst_fs: &dyn Fs,
+    dst: &Location,
+    progress: vfs::Progress<'_>,
+) -> io::Result<()> {
     match (src, dst) {
         (Location::Local(s), _) => {
             let mut file = std::fs::File::open(s)?;
@@ -558,7 +710,9 @@ fn copy_file(src_fs: &dyn Fs, src: &Location, size: u64, dst_fs: &dyn Fs, dst: &
                 // Write to a hidden partial file, then rename: an interrupted copy leaves no
                 // half file under the real name.
                 let partial = partial_path(d);
-                let r = dst_fs.write_from(&partial.to_string_lossy(), &mut file, size, progress).and_then(|_| std::fs::rename(&partial, d));
+                let r = dst_fs
+                    .write_from(&partial.to_string_lossy(), &mut file, size, progress)
+                    .and_then(|_| std::fs::rename(&partial, d));
                 if r.is_err() {
                     let _ = std::fs::remove_file(&partial);
                 }
@@ -568,16 +722,20 @@ fn copy_file(src_fs: &dyn Fs, src: &Location, size: u64, dst_fs: &dyn Fs, dst: &
                 }
                 Ok(())
             } else {
-                dst_fs.write_from(&dst.backend_path(), &mut file, size, progress).map(|_| ())
+                dst_fs
+                    .write_from(&dst.backend_path(), &mut file, size, progress)
+                    .map(|_| ())
             }
         }
         (_, Location::Local(d)) => {
             let partial = partial_path(d);
             let mut file = std::fs::File::create(&partial)?;
-            let r = src_fs.read_into(&src.backend_path(), &mut file, progress).and_then(|_| {
-                drop(file);
-                std::fs::rename(&partial, d)
-            });
+            let r = src_fs
+                .read_into(&src.backend_path(), &mut file, progress)
+                .and_then(|_| {
+                    drop(file);
+                    std::fs::rename(&partial, d)
+                });
             if r.is_err() {
                 let _ = std::fs::remove_file(&partial);
             }
@@ -595,7 +753,9 @@ fn copy_file(src_fs: &dyn Fs, src: &Location, size: u64, dst_fs: &dyn Fs, dst: &
                 drop(file);
                 let mut file = std::fs::File::open(&tmp)?;
                 let mut rest = |n: u64| progress(size / 2 + n / 2);
-                dst_fs.write_from(&dst.backend_path(), &mut file, size, &mut rest).map(|_| ())
+                dst_fs
+                    .write_from(&dst.backend_path(), &mut file, size, &mut rest)
+                    .map(|_| ())
             })();
             let _ = std::fs::remove_file(&tmp);
             r
@@ -604,14 +764,21 @@ fn copy_file(src_fs: &dyn Fs, src: &Location, size: u64, dst_fs: &dyn Fs, dst: &
 }
 
 fn partial_path(target: &std::path::Path) -> PathBuf {
-    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = target
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     target.with_file_name(format!(".{name}.dexfiles-part"))
 }
 
 fn delete_tree(state: &JobState, fs: &dyn Fs, loc: &Location) -> io::Result<()> {
     if let Location::Local(p) = loc {
         let meta = std::fs::symlink_metadata(p)?;
-        return if meta.is_dir() { std::fs::remove_dir_all(p) } else { std::fs::remove_file(p) };
+        return if meta.is_dir() {
+            std::fs::remove_dir_all(p)
+        } else {
+            std::fs::remove_file(p)
+        };
     }
     if state.cancelled() {
         return Err(vfs::cancelled());
@@ -663,19 +830,48 @@ mod tests {
         std::fs::write(a.join("sub/one.txt"), b"hello").unwrap_or_default();
         std::fs::write(a.join("two.bin"), vec![7u8; 300_000]).unwrap_or_default();
 
-        let s = wait(&start(&ctx, JobKind::Transfer { sources: vec![Location::local(&a)], dest: Location::local(&b), mode: Mode::Copy }));
+        let s = wait(&start(
+            &ctx,
+            JobKind::Transfer {
+                sources: vec![Location::local(&a)],
+                dest: Location::local(&b),
+                mode: Mode::Copy,
+            },
+        ));
         assert!(s.errors.is_empty(), "{:?}", s.errors);
-        assert_eq!(std::fs::read(b.join("a/sub/one.txt")).unwrap_or_default(), b"hello");
-        assert_eq!(std::fs::metadata(b.join("a/two.bin")).map(|m| m.len()).unwrap_or(0), 300_000);
+        assert_eq!(
+            std::fs::read(b.join("a/sub/one.txt")).unwrap_or_default(),
+            b"hello"
+        );
+        assert_eq!(
+            std::fs::metadata(b.join("a/two.bin"))
+                .map(|m| m.len())
+                .unwrap_or(0),
+            300_000
+        );
         assert_eq!(s.total_bytes, 300_005);
 
         // Duplicating in place keeps both.
-        let s = wait(&start(&ctx, JobKind::Transfer { sources: vec![Location::local(a.join("two.bin"))], dest: Location::local(&a), mode: Mode::Copy }));
+        let s = wait(&start(
+            &ctx,
+            JobKind::Transfer {
+                sources: vec![Location::local(a.join("two.bin"))],
+                dest: Location::local(&a),
+                mode: Mode::Copy,
+            },
+        ));
         assert!(s.errors.is_empty());
         assert!(a.join("two (2).bin").exists());
 
         // Moving onto a taken name asks; answer "keep both".
-        let job = start(&ctx, JobKind::Transfer { sources: vec![Location::local(a.join("two.bin"))], dest: Location::local(b.join("a")), mode: Mode::Move });
+        let job = start(
+            &ctx,
+            JobKind::Transfer {
+                sources: vec![Location::local(a.join("two.bin"))],
+                dest: Location::local(b.join("a")),
+                mode: Mode::Move,
+            },
+        );
         for _ in 0..200 {
             if job.state.status().question.is_some() {
                 break;
@@ -683,17 +879,32 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(job.state.status().question.is_some());
-        job.state.answer(Answer { conflict: Conflict::KeepBoth, apply_to_all: false });
+        job.state.answer(Answer {
+            conflict: Conflict::KeepBoth,
+            apply_to_all: false,
+        });
         let s = wait(&job);
         assert!(s.errors.is_empty());
         assert!(!a.join("two.bin").exists());
         assert!(b.join("a/two (2).bin").exists());
 
         // A folder can't be copied into itself.
-        let s = wait(&start(&ctx, JobKind::Transfer { sources: vec![Location::local(&a)], dest: Location::local(a.join("sub")), mode: Mode::Move }));
+        let s = wait(&start(
+            &ctx,
+            JobKind::Transfer {
+                sources: vec![Location::local(&a)],
+                dest: Location::local(a.join("sub")),
+                mode: Mode::Move,
+            },
+        ));
         assert_eq!(s.errors.len(), 1);
 
-        let s = wait(&start(&ctx, JobKind::Delete { items: vec![Location::local(&b)] }));
+        let s = wait(&start(
+            &ctx,
+            JobKind::Delete {
+                items: vec![Location::local(&b)],
+            },
+        ));
         assert!(s.errors.is_empty());
         assert!(!b.exists());
     }

@@ -24,7 +24,10 @@ fn err(e: FtpError) -> io::Error {
 
 impl FtpFs {
     pub fn connect(server: &Server) -> io::Result<Self> {
-        let fs = FtpFs { server: server.clone(), stream: Mutex::new(None) };
+        let fs = FtpFs {
+            server: server.clone(),
+            stream: Mutex::new(None),
+        };
         let stream = fs.open()?;
         *fs.stream.lock().unwrap_or_else(PoisonError::into_inner) = Some(stream);
         Ok(fs)
@@ -35,20 +38,41 @@ impl FtpFs {
         let addr = std::net::ToSocketAddrs::to_socket_addrs(&(s.host.as_str(), s.port))?
             .next()
             .ok_or_else(|| vfs::other("host not found"))?;
-        let mut ftp = RustlsFtpStream::connect_timeout(addr, Duration::from_secs(15)).map_err(err)?;
+        let mut ftp =
+            RustlsFtpStream::connect_timeout(addr, Duration::from_secs(15)).map_err(err)?;
         if s.kind == ServerKind::Ftps {
             let config = super::tls_config(s.accept_invalid_certs)?;
-            ftp = ftp.into_secure(RustlsConnector::from(config), &s.host).map_err(err)?;
+            ftp = ftp
+                .into_secure(RustlsConnector::from(config), &s.host)
+                .map_err(err)?;
         }
-        let user = if s.user.is_empty() { "anonymous" } else { s.user.as_str() };
-        let password = if s.user.is_empty() && s.password.is_empty() { "dexfiles@" } else { s.password.as_str() };
+        let user = if s.user.is_empty() {
+            "anonymous"
+        } else {
+            s.user.as_str()
+        };
+        let password = if s.user.is_empty() && s.password.is_empty() {
+            "dexfiles@"
+        } else {
+            s.password.as_str()
+        };
         ftp.login(user, password).map_err(err)?;
-        ftp.transfer_type(suppaftp::types::FileType::Binary).map_err(err)?;
+        ftp.transfer_type(suppaftp::types::FileType::Binary)
+            .map_err(err)?;
         Ok(ftp)
     }
 
+    /// After an aborted transfer servers answer unevenly (226 or 225, sometimes both), which
+    /// leaves the control channel out of step: start the next operation on a fresh connection.
+    fn drop_connection(&self) {
+        *self.stream.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    }
+
     /// Run `f` on the connection; if the connection dropped, reconnect once and retry.
-    fn with<T>(&self, mut f: impl FnMut(&mut RustlsFtpStream) -> Result<T, FtpError>) -> io::Result<T> {
+    fn with<T>(
+        &self,
+        mut f: impl FnMut(&mut RustlsFtpStream) -> Result<T, FtpError>,
+    ) -> io::Result<T> {
         let mut guard = self.stream.lock().unwrap_or_else(PoisonError::into_inner);
         for attempt in 0..2 {
             if guard.is_none() {
@@ -100,7 +124,13 @@ impl Fs for FtpFs {
         let (mlsd, lines) = lines;
         let mut out = Vec::new();
         for line in lines {
-            let parsed = if mlsd { suppaftp::list::ListParser::parse_mlsd(&line).ok() } else { suppaftp::list::ListParser::parse_posix(&line).or_else(|_| suppaftp::list::ListParser::parse_dos(&line)).ok() };
+            let parsed = if mlsd {
+                suppaftp::list::ListParser::parse_mlsd(&line).ok()
+            } else {
+                suppaftp::list::ListParser::parse_posix(&line)
+                    .or_else(|_| suppaftp::list::ListParser::parse_dos(&line))
+                    .ok()
+            };
             let Some(f) = parsed else { continue };
             if f.name() == "." || f.name() == ".." || f.name().is_empty() {
                 continue;
@@ -117,7 +147,16 @@ impl Fs for FtpFs {
             None => ("/", trimmed),
         };
         if name.is_empty() {
-            return Ok(RawEntry { name: "/".into(), kind: Kind::Dir, size: 0, modified: None, created: None, symlink: false, readonly: false, hidden_attr: false });
+            return Ok(RawEntry {
+                name: "/".into(),
+                kind: Kind::Dir,
+                size: 0,
+                modified: None,
+                created: None,
+                symlink: false,
+                readonly: false,
+                hidden_attr: false,
+            });
         }
         self.list(parent)?
             .into_iter()
@@ -125,29 +164,52 @@ impl Fs for FtpFs {
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "not found"))
     }
 
-    fn read_into(&self, path: &str, out: &mut dyn Write, progress: Progress<'_>) -> io::Result<u64> {
+    fn read_into(
+        &self,
+        path: &str,
+        out: &mut dyn Write,
+        progress: Progress<'_>,
+    ) -> io::Result<u64> {
         let mut result = Ok(0);
+        let mut aborted = false;
         self.with(|ftp| {
             let mut stream = ftp.retr_as_stream(path)?;
             result = vfs::copy_stream(&mut stream, out, progress);
             if result.is_err() {
-                return ftp.abort(stream);
+                aborted = true;
+                let _ = ftp.abort(stream);
+                return Ok(());
             }
             stream.finish()
         })?;
+        if aborted {
+            self.drop_connection();
+        }
         result
     }
 
-    fn write_from(&self, path: &str, input: &mut dyn Read, _size: u64, progress: Progress<'_>) -> io::Result<u64> {
+    fn write_from(
+        &self,
+        path: &str,
+        input: &mut dyn Read,
+        _size: u64,
+        progress: Progress<'_>,
+    ) -> io::Result<u64> {
         let mut result = Ok(0);
+        let mut aborted = false;
         self.with(|ftp| {
             let mut stream = ftp.put_with_stream(path)?;
             result = vfs::copy_stream(input, &mut stream, progress);
             if result.is_err() {
-                return ftp.abort(stream);
+                aborted = true;
+                let _ = ftp.abort(stream);
+                return Ok(());
             }
             stream.finish()
         })?;
+        if aborted {
+            self.drop_connection();
+        }
         result
     }
 

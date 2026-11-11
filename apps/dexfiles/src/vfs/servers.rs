@@ -23,7 +23,14 @@ pub enum ServerKind {
 }
 
 impl ServerKind {
-    pub const ALL: [ServerKind; 6] = [ServerKind::Sftp, ServerKind::Smb, ServerKind::WebDavs, ServerKind::WebDav, ServerKind::Ftp, ServerKind::Ftps];
+    pub const ALL: [ServerKind; 6] = [
+        ServerKind::Sftp,
+        ServerKind::Smb,
+        ServerKind::WebDavs,
+        ServerKind::WebDav,
+        ServerKind::Ftp,
+        ServerKind::Ftps,
+    ];
 
     pub fn scheme(self) -> &'static str {
         match self {
@@ -120,10 +127,20 @@ impl Server {
 
     /// `sftp://user@host:port` (and the share or base path), for the address bar.
     pub fn url_base(&self) -> String {
-        let user = if self.user.is_empty() { String::new() } else { format!("{}@", self.user) };
-        let port = if self.port == self.kind.default_port() { String::new() } else { format!(":{}", self.port) };
+        let user = if self.user.is_empty() {
+            String::new()
+        } else {
+            format!("{}@", self.user)
+        };
+        let port = if self.port == self.kind.default_port() {
+            String::new()
+        } else {
+            format!(":{}", self.port)
+        };
         let share = match self.kind {
-            ServerKind::Smb | ServerKind::WebDav | ServerKind::WebDavs if !self.share.is_empty() => {
+            ServerKind::Smb | ServerKind::WebDav | ServerKind::WebDavs
+                if !self.share.is_empty() =>
+            {
                 format!("/{}", self.share.trim_matches('/'))
             }
             _ => String::new(),
@@ -133,9 +150,20 @@ impl Server {
 
     /// The location of the folder to open first.
     pub fn start(&self) -> super::Location {
-        let path = if self.start_path.trim().is_empty() { "/".to_owned() } else { self.start_path.clone() };
-        let path = if path.starts_with('/') { path } else { format!("/{path}") };
-        super::Location::Remote { server: self.id, path }
+        let path = if self.start_path.trim().is_empty() {
+            "/".to_owned()
+        } else {
+            self.start_path.clone()
+        };
+        let path = if path.starts_with('/') {
+            path
+        } else {
+            format!("/{path}")
+        };
+        super::Location::Remote {
+            server: self.id,
+            path,
+        }
     }
 }
 
@@ -170,7 +198,13 @@ pub fn parse_url(text: &str) -> Option<Url> {
     if host.is_empty() {
         return None;
     }
-    Some(Url { kind, user, host, port, path: percent_decode(&path) })
+    Some(Url {
+        kind,
+        user,
+        host,
+        port,
+        path: percent_decode(&path),
+    })
 }
 
 pub fn percent_decode(s: &str) -> String {
@@ -180,7 +214,9 @@ pub fn percent_decode(s: &str) -> String {
     while i < bytes.len() {
         if bytes[i] == b'%'
             && i + 2 < bytes.len()
-            && let Some(v) = std::str::from_utf8(&bytes[i + 1..i + 3]).ok().and_then(|h| u8::from_str_radix(h, 16).ok())
+            && let Some(v) = std::str::from_utf8(&bytes[i + 1..i + 3])
+                .ok()
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
         {
             out.push(v);
             i += 3;
@@ -226,11 +262,20 @@ pub fn set_servers(servers: &[Server]) {
 }
 
 pub fn server(id: ServerId) -> Option<Server> {
-    SERVERS.read().unwrap_or_else(PoisonError::into_inner).iter().find(|s| s.id == id).cloned()
+    SERVERS
+        .read()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .find(|s| s.id == id)
+        .cloned()
 }
 
 pub fn set_session_password(id: ServerId, password: String) {
-    SESSION_PASSWORDS.lock().unwrap_or_else(PoisonError::into_inner).get_or_insert_with(HashMap::new).insert(id, password);
+    SESSION_PASSWORDS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get_or_insert_with(HashMap::new)
+        .insert(id, password);
     disconnect(id);
 }
 
@@ -240,32 +285,57 @@ pub fn needs_password(id: ServerId) -> bool {
     if s.remember_password || s.user.is_empty() {
         return false;
     }
-    !SESSION_PASSWORDS.lock().unwrap_or_else(PoisonError::into_inner).as_ref().is_some_and(|m| m.contains_key(&id))
+    !SESSION_PASSWORDS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .is_some_and(|m| m.contains_key(&id))
 }
 
 pub fn disconnect(id: ServerId) {
-    if let Some(conns) = CONNECTIONS.lock().unwrap_or_else(PoisonError::into_inner).as_mut() {
+    if let Some(conns) = CONNECTIONS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_mut()
+    {
         conns.remove(&id);
     }
 }
 
 pub fn is_connected(id: ServerId) -> bool {
-    CONNECTIONS.lock().unwrap_or_else(PoisonError::into_inner).as_ref().is_some_and(|c| c.contains_key(&id))
+    CONNECTIONS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .is_some_and(|c| c.contains_key(&id))
 }
 
 /// The open connection to a server, connecting first if needed (blocks).
 pub fn connection(id: ServerId) -> io::Result<Arc<dyn Fs>> {
-    if let Some(fs) = CONNECTIONS.lock().unwrap_or_else(PoisonError::into_inner).as_ref().and_then(|c| c.get(&id)) {
+    if let Some(fs) = CONNECTIONS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .and_then(|c| c.get(&id))
+    {
         return Ok(fs.clone());
     }
     let mut server = server(id).ok_or_else(|| super::other("unknown server"))?;
-    if !server.remember_password {
-        if let Some(p) = SESSION_PASSWORDS.lock().unwrap_or_else(PoisonError::into_inner).as_ref().and_then(|m| m.get(&id)) {
-            server.password = p.clone();
-        }
+    if !server.remember_password
+        && let Some(p) = SESSION_PASSWORDS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .and_then(|m| m.get(&id))
+    {
+        server.password = p.clone();
     }
     let fs = connect(&server)?;
-    CONNECTIONS.lock().unwrap_or_else(PoisonError::into_inner).get_or_insert_with(HashMap::new).insert(id, fs.clone());
+    CONNECTIONS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get_or_insert_with(HashMap::new)
+        .insert(id, fs.clone());
     Ok(fs)
 }
 
@@ -286,7 +356,16 @@ mod tests {
     #[test]
     fn urls() {
         let u = parse_url("sftp://ana@nas.local:2222/home/ana").unwrap_or_else(|| unreachable!());
-        assert_eq!(u, Url { kind: ServerKind::Sftp, user: "ana".into(), host: "nas.local".into(), port: 2222, path: "/home/ana".into() });
+        assert_eq!(
+            u,
+            Url {
+                kind: ServerKind::Sftp,
+                user: "ana".into(),
+                host: "nas.local".into(),
+                port: 2222,
+                path: "/home/ana".into()
+            }
+        );
         let u = parse_url("smb://192.168.1.5/Public%20Docs").unwrap_or_else(|| unreachable!());
         assert_eq!(u.port, 445);
         assert_eq!(u.path, "/Public Docs");

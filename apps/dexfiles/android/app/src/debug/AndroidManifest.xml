@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: a second launcher icon that opens the diagnostics report (craft-android's
+     Diag.kt), for testers without adb. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity-alias
+            android:name="io.github.dexfiles.Diagnostics"
+            android:exported="true"
+            android:label="@string/app_diagnostics_label"
+            android:icon="@mipmap/ic_launcher"
+            android:targetActivity="io.github.dexfiles.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+    </application>
+</manifest>

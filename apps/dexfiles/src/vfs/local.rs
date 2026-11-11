@@ -25,7 +25,11 @@ fn secs(t: io::Result<std::time::SystemTime>) -> Option<i64> {
 pub fn raw_entry(path: &Path, name: String) -> io::Result<RawEntry> {
     let link = std::fs::symlink_metadata(path)?;
     let symlink = link.file_type().is_symlink();
-    let meta = if symlink { std::fs::metadata(path).unwrap_or(link) } else { link };
+    let meta = if symlink {
+        std::fs::metadata(path).unwrap_or(link)
+    } else {
+        link
+    };
     let kind = if meta.is_dir() {
         Kind::Dir
     } else if meta.is_file() {
@@ -73,11 +77,19 @@ impl Fs for LocalFs {
 
     fn stat(&self, path: &str) -> io::Result<RawEntry> {
         let p = Path::new(path);
-        let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.to_owned());
+        let name = p
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.to_owned());
         raw_entry(p, name)
     }
 
-    fn read_into(&self, path: &str, out: &mut dyn Write, progress: Progress<'_>) -> io::Result<u64> {
+    fn read_into(
+        &self,
+        path: &str,
+        out: &mut dyn Write,
+        progress: Progress<'_>,
+    ) -> io::Result<u64> {
         let mut f = std::fs::File::open(path)?;
         super::copy_stream(&mut f, out, progress)
     }
@@ -89,7 +101,13 @@ impl Fs for LocalFs {
         Ok(buf)
     }
 
-    fn write_from(&self, path: &str, input: &mut dyn Read, _size: u64, progress: Progress<'_>) -> io::Result<u64> {
+    fn write_from(
+        &self,
+        path: &str,
+        input: &mut dyn Read,
+        _size: u64,
+        progress: Progress<'_>,
+    ) -> io::Result<u64> {
         let mut f = std::fs::File::create(path)?;
         let n = super::copy_stream(input, &mut f, progress)?;
         f.sync_all().ok();
@@ -113,6 +131,9 @@ impl Fs for LocalFs {
     }
 
     fn space(&self, path: &str) -> Option<(u64, u64)> {
-        Some((fs4::available_space(path).ok()?, fs4::total_space(path).ok()?))
+        Some((
+            fs4::available_space(path).ok()?,
+            fs4::total_space(path).ok()?,
+        ))
     }
 }

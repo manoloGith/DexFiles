@@ -41,18 +41,30 @@ impl Category {
             return Category::Folder;
         }
         match ext {
-            "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "ico" | "tif" | "tiff" | "heic" | "heif" | "avif" | "svg" | "raw" | "dng" | "cr2" | "nef" => Category::Image,
-            "mp4" | "mkv" | "mov" | "avi" | "webm" | "m4v" | "3gp" | "wmv" | "flv" | "mpg" | "mpeg" | "ts" => Category::Video,
-            "mp3" | "flac" | "ogg" | "opus" | "wav" | "m4a" | "aac" | "wma" | "aiff" | "mid" | "midi" | "amr" => Category::Audio,
+            "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "ico" | "tif" | "tiff" | "heic"
+            | "heif" | "avif" | "svg" | "raw" | "dng" | "cr2" | "nef" => Category::Image,
+            "mp4" | "mkv" | "mov" | "avi" | "webm" | "m4v" | "3gp" | "wmv" | "flv" | "mpg"
+            | "mpeg" | "ts" => Category::Video,
+            "mp3" | "flac" | "ogg" | "opus" | "wav" | "m4a" | "aac" | "wma" | "aiff" | "mid"
+            | "midi" | "amr" => Category::Audio,
             "pdf" => Category::Pdf,
             "doc" | "docx" | "odt" | "rtf" | "pages" | "epub" | "fodt" => Category::Document,
-            "xls" | "xlsx" | "xlsm" | "xlsb" | "ods" | "csv" | "tsv" | "numbers" | "fods" => Category::Spreadsheet,
+            "xls" | "xlsx" | "xlsm" | "xlsb" | "ods" | "csv" | "tsv" | "numbers" | "fods" => {
+                Category::Spreadsheet
+            }
             "ppt" | "pptx" | "odp" | "key" | "fodp" => Category::Presentation,
-            "txt" | "md" | "log" | "ini" | "cfg" | "conf" | "nfo" | "srt" | "vtt" | "tex" => Category::Text,
-            "rs" | "c" | "h" | "cpp" | "hpp" | "py" | "js" | "tsx" | "jsx" | "java" | "kt" | "kts" | "go" | "rb" | "php" | "sh" | "bash" | "html" | "htm" | "css" | "json"
-            | "xml" | "yaml" | "yml" | "toml" | "sql" | "swift" | "cs" | "lua" | "gradle" | "properties" => Category::Code,
-            "zip" | "7z" | "rar" | "tar" | "gz" | "tgz" | "bz2" | "xz" | "tar.gz" | "tar.bz2" | "tar.xz" | "tar.zst" | "zst" | "jar" | "iso" | "cbz" | "cbr" => Category::Archive,
-            "apk" | "apks" | "xapk" | "exe" | "msi" | "deb" | "rpm" | "appimage" | "dmg" => Category::App,
+            "txt" | "md" | "log" | "ini" | "cfg" | "conf" | "nfo" | "srt" | "vtt" | "tex" => {
+                Category::Text
+            }
+            "rs" | "c" | "h" | "cpp" | "hpp" | "py" | "js" | "tsx" | "jsx" | "java" | "kt"
+            | "kts" | "go" | "rb" | "php" | "sh" | "bash" | "html" | "htm" | "css" | "json"
+            | "xml" | "yaml" | "yml" | "toml" | "sql" | "swift" | "cs" | "lua" | "gradle"
+            | "properties" => Category::Code,
+            "zip" | "7z" | "rar" | "tar" | "gz" | "tgz" | "bz2" | "xz" | "tar.gz" | "tar.bz2"
+            | "tar.xz" | "tar.zst" | "zst" | "jar" | "iso" | "cbz" | "cbr" => Category::Archive,
+            "apk" | "apks" | "xapk" | "exe" | "msi" | "deb" | "rpm" | "appimage" | "dmg" => {
+                Category::App
+            }
             _ => Category::Other,
         }
     }
@@ -115,16 +127,28 @@ pub fn format_size(bytes: u64) -> String {
         v /= 1000.0;
         unit += 1;
     }
-    let text = if v < 10.0 { format!("{v:.1}") } else { format!("{v:.0}") };
-    let text = if crate::i18n::decimal_comma() { text.replace('.', ",") } else { text };
+    let text = if v < 10.0 {
+        format!("{v:.1}")
+    } else {
+        format!("{v:.0}")
+    };
+    let text = if crate::i18n::decimal_comma() {
+        text.replace('.', ",")
+    } else {
+        text
+    };
     format!("{text} {}", UNITS[unit])
 }
 
 /// A modification date for a listing: time today, "Yesterday", or the date.
 pub fn format_date(secs: Option<i64>) -> String {
     use chrono::{Local, TimeZone};
-    let Some(secs) = secs else { return "—".to_owned() };
-    let Some(t) = Local.timestamp_opt(secs, 0).single() else { return "—".to_owned() };
+    let Some(secs) = secs else {
+        return "—".to_owned();
+    };
+    let Some(t) = Local.timestamp_opt(secs, 0).single() else {
+        return "—".to_owned();
+    };
     let now = Local::now();
     let today = now.date_naive();
     let day = t.date_naive();
@@ -142,15 +166,25 @@ pub fn format_date(secs: Option<i64>) -> String {
 /// A full date, for the info panel.
 pub fn format_date_long(secs: Option<i64>) -> String {
     use chrono::{Local, TimeZone};
-    let Some(t) = secs.and_then(|s| Local.timestamp_opt(s, 0).single()) else { return "—".to_owned() };
-    if crate::i18n::decimal_comma() { t.format("%d/%m/%Y %H:%M:%S").to_string() } else { t.format("%Y-%m-%d %H:%M:%S").to_string() }
+    let Some(t) = secs.and_then(|s| Local.timestamp_opt(s, 0).single()) else {
+        return "—".to_owned();
+    };
+    if crate::i18n::decimal_comma() {
+        t.format("%d/%m/%Y %H:%M:%S").to_string()
+    } else {
+        t.format("%Y-%m-%d %H:%M:%S").to_string()
+    }
 }
 
 /// The kind column: "PNG image", "Folder"…
 pub fn kind_label(ext: &str, is_dir: bool) -> String {
     let cat = Category::of(ext, is_dir);
     let name = crate::i18n::t(cat.key());
-    if is_dir || ext.is_empty() { name.to_owned() } else { format!("{name} {}", ext.to_uppercase()) }
+    if is_dir || ext.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{name} {}", ext.to_uppercase())
+    }
 }
 
 #[cfg(test)]

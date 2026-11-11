@@ -17,7 +17,14 @@ pub enum ViewMode {
 }
 
 impl ViewMode {
-    pub const ALL: [ViewMode; 6] = [ViewMode::LargeIcons, ViewMode::MediumIcons, ViewMode::SmallIcons, ViewMode::List, ViewMode::Details, ViewMode::Content];
+    pub const ALL: [ViewMode; 6] = [
+        ViewMode::LargeIcons,
+        ViewMode::MediumIcons,
+        ViewMode::SmallIcons,
+        ViewMode::List,
+        ViewMode::Details,
+        ViewMode::Content,
+    ];
 
     pub fn key(self) -> &'static str {
         match self {
@@ -31,7 +38,10 @@ impl ViewMode {
     }
 
     pub fn is_grid(self) -> bool {
-        matches!(self, ViewMode::LargeIcons | ViewMode::MediumIcons | ViewMode::SmallIcons)
+        matches!(
+            self,
+            ViewMode::LargeIcons | ViewMode::MediumIcons | ViewMode::SmallIcons
+        )
     }
 
     /// The icon size of a grid view, in points.
@@ -57,7 +67,13 @@ pub enum SortKey {
 }
 
 impl SortKey {
-    pub const ALL: [SortKey; 5] = [SortKey::Name, SortKey::Modified, SortKey::Kind, SortKey::Size, SortKey::Status];
+    pub const ALL: [SortKey; 5] = [
+        SortKey::Name,
+        SortKey::Modified,
+        SortKey::Kind,
+        SortKey::Size,
+        SortKey::Status,
+    ];
 
     pub fn key(self) -> &'static str {
         match self {
@@ -180,14 +196,19 @@ impl Settings {
             if key == "home" {
                 continue;
             }
-            self.favorites.push(Favorite { name: crate::i18n::t(key).to_owned(), location: Location::Local(path) });
+            self.favorites.push(Favorite {
+                name: crate::i18n::t(key).to_owned(),
+                location: Location::Local(path),
+            });
         }
     }
 
     /// The folder to open first.
     pub fn start_location(&self) -> Location {
         match self.start {
-            StartMode::Folder if !self.start_folder.trim().is_empty() => Location::Local(PathBuf::from(self.start_folder.trim())),
+            StartMode::Folder if !self.start_folder.trim().is_empty() => {
+                Location::Local(PathBuf::from(self.start_folder.trim()))
+            }
             StartMode::Downloads => crate::platform::standard_folders()
                 .into_iter()
                 .find(|(k, _)| *k == "downloads")

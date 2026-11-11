@@ -47,13 +47,19 @@ pub fn run(mut options: impl FnMut(eframe::Renderer) -> eframe::NativeOptions, l
     let mut last_error = None;
     for renderer in [eframe::Renderer::Wgpu, eframe::Renderer::Glow] {
         let launch = launch.clone();
-        let result = eframe::run_native("DexFiles", options(renderer), Box::new(move |cc| Ok(create(cc, launch))));
+        let result = eframe::run_native(
+            "DexFiles",
+            options(renderer),
+            Box::new(move |cc| Ok(create(cc, launch))),
+        );
         match result {
             Ok(()) => return,
             Err(e) => {
                 log::error!("dexfiles: the {renderer} renderer could not start: {e}");
                 #[cfg(target_os = "android")]
-                craft_android::android::diag(&format!("the {renderer} renderer could not start: {e}"));
+                craft_android::android::diag(&format!(
+                    "the {renderer} renderer could not start: {e}"
+                ));
                 last_error = Some(e);
             }
         }

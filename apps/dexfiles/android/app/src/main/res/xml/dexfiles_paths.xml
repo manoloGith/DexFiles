@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What DexFiles may hand to other apps ("Open with", "Share"): any file it can read, on any
+     volume (the internal storage, SD cards, USB drives), and its downloads from servers (cache). -->
+<paths>
+    <root-path name="root" path="/" />
+    <external-path name="external" path="." />
+    <cache-path name="cache" path="." />
+    <files-path name="files" path="." />
+</paths>

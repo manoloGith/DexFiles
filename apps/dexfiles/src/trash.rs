@@ -31,7 +31,12 @@ pub fn trash_dir_for(path: &Path) -> PathBuf {
     // The volume the path is on: the longest mount point above it on the same device.
     let mut best: Option<PathBuf> = None;
     for v in crate::platform::volumes() {
-        if path.starts_with(&v.path) && crate::vfs::local::device(&v.path) == dev && best.as_ref().is_none_or(|b| v.path.as_os_str().len() > b.as_os_str().len()) {
+        if path.starts_with(&v.path)
+            && crate::vfs::local::device(&v.path) == dev
+            && best
+                .as_ref()
+                .is_none_or(|b| v.path.as_os_str().len() > b.as_os_str().len())
+        {
             best = Some(v.path.clone());
         }
     }
@@ -92,18 +97,34 @@ fn encode(p: &Path) -> String {
 fn free_name(trash: &Path, name: &str) -> String {
     let mut candidate = name.to_owned();
     let mut n = 1;
-    while trash.join("files").join(&candidate).symlink_metadata().is_ok() || trash.join("info").join(format!("{candidate}.trashinfo")).exists() {
+    while trash
+        .join("files")
+        .join(&candidate)
+        .symlink_metadata()
+        .is_ok()
+        || trash
+            .join("info")
+            .join(format!("{candidate}.trashinfo"))
+            .exists()
+    {
         n += 1;
         let stem = crate::vfs::stem(name);
         let ext = crate::vfs::extension(name);
-        candidate = if ext.is_empty() { format!("{stem}.{n}") } else { format!("{stem}.{n}.{ext}") };
+        candidate = if ext.is_empty() {
+            format!("{stem}.{n}")
+        } else {
+            format!("{stem}.{n}.{ext}")
+        };
     }
     candidate
 }
 
 /// Move a local file or folder to the trash.
 pub fn trash(path: &Path) -> io::Result<()> {
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).ok_or_else(|| crate::vfs::other("nothing to delete"))?;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .ok_or_else(|| crate::vfs::other("nothing to delete"))?;
     let trash = trash_dir_for(path);
     if path.starts_with(&trash) {
         return Err(crate::vfs::other("already in the trash"));
@@ -113,7 +134,10 @@ pub fn trash(path: &Path) -> io::Result<()> {
     let stored = free_name(&trash, &name);
     let info = trash.join("info").join(format!("{stored}.trashinfo"));
     let date = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S");
-    std::fs::write(&info, format!("[Trash Info]\nPath={}\nDeletionDate={date}\n", encode(path)))?;
+    std::fs::write(
+        &info,
+        format!("[Trash Info]\nPath={}\nDeletionDate={date}\n", encode(path)),
+    )?;
     let target = trash.join("files").join(&stored);
     if let Err(e) = std::fs::rename(path, &target) {
         // Another device after all (a bind mount): copy, then delete.
@@ -145,26 +169,50 @@ fn parse_info(text: &str) -> (Option<PathBuf>, Option<i64>) {
 pub fn list() -> Vec<Entry> {
     let mut out = Vec::new();
     for dir in all_trash_dirs() {
-        let Ok(items) = std::fs::read_dir(dir.join("info")) else { continue };
+        let Ok(items) = std::fs::read_dir(dir.join("info")) else {
+            continue;
+        };
         for item in items.flatten() {
             let info = item.path();
-            let Some(stored) = info.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".trashinfo")).map(str::to_owned) else { continue };
+            let Some(stored) = info
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_suffix(".trashinfo"))
+                .map(str::to_owned)
+            else {
+                continue;
+            };
             let file = dir.join("files").join(&stored);
-            let Ok(raw) = crate::vfs::local::raw_entry(&file, stored.clone()) else { continue };
-            let (original, deleted) = parse_info(&std::fs::read_to_string(&info).unwrap_or_default());
+            let Ok(raw) = crate::vfs::local::raw_entry(&file, stored.clone()) else {
+                continue;
+            };
+            let (original, deleted) =
+                parse_info(&std::fs::read_to_string(&info).unwrap_or_default());
             // On a volume's trash, a relative path is relative to the volume's top.
             let original = match original {
                 Some(p) if p.is_relative() => dir.parent().map(|top| top.join(&p)).unwrap_or(p),
                 Some(p) => p,
                 None => PathBuf::from(&stored),
             };
-            let name = original.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(stored);
+            let name = original
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or(stored);
             let mut e = Entry::from_raw(&Location::Local(dir.join("files")), raw);
             e.name = name.clone();
-            e.ext = if e.kind == Kind::Dir { String::new() } else { crate::vfs::extension(&name) };
+            e.ext = if e.kind == Kind::Dir {
+                String::new()
+            } else {
+                crate::vfs::extension(&name)
+            };
             e.hidden = false;
             e.location = Location::Local(file.clone());
-            e.trash = Some(TrashInfo { original, deleted, file, info });
+            e.trash = Some(TrashInfo {
+                original,
+                deleted,
+                file,
+                info,
+            });
             out.push(e);
         }
     }
@@ -176,8 +224,13 @@ pub fn restore(item: &TrashInfo) -> io::Result<PathBuf> {
     let mut target = item.original.clone();
     if target.symlink_metadata().is_ok() {
         let parent = target.parent().map(Path::to_path_buf).unwrap_or_default();
-        let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        target = parent.join(crate::ops::unique_name(&name, |n| parent.join(n).symlink_metadata().is_ok()));
+        let name = target
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        target = parent.join(crate::ops::unique_name(&name, |n| {
+            parent.join(n).symlink_metadata().is_ok()
+        }));
     }
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
@@ -209,7 +262,11 @@ pub fn empty() -> io::Result<usize> {
 }
 
 pub fn count() -> usize {
-    all_trash_dirs().iter().filter_map(|d| std::fs::read_dir(d.join("info")).ok()).map(|r| r.count()).sum()
+    all_trash_dirs()
+        .iter()
+        .filter_map(|d| std::fs::read_dir(d.join("info")).ok())
+        .map(|r| r.count())
+        .sum()
 }
 
 fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
@@ -228,7 +285,11 @@ fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
 
 fn remove_tree(path: &Path) -> io::Result<()> {
     let meta = std::fs::symlink_metadata(path)?;
-    if meta.is_dir() { std::fs::remove_dir_all(path) } else { std::fs::remove_file(path) }
+    if meta.is_dir() {
+        std::fs::remove_dir_all(path)
+    } else {
+        std::fs::remove_file(path)
+    }
 }
 
 #[cfg(test)]
@@ -237,7 +298,9 @@ mod tests {
 
     #[test]
     fn info_files_round_trip() {
-        let (p, d) = parse_info("[Trash Info]\nPath=/home/a/My%20file.txt\nDeletionDate=2026-11-10T12:30:00\n");
+        let (p, d) = parse_info(
+            "[Trash Info]\nPath=/home/a/My%20file.txt\nDeletionDate=2026-11-10T12:30:00\n",
+        );
         assert_eq!(p, Some(PathBuf::from("/home/a/My file.txt")));
         assert!(d.is_some());
     }

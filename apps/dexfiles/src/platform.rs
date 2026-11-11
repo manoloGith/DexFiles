@@ -52,7 +52,9 @@ pub fn home() -> PathBuf {
     }
     #[cfg(not(target_os = "android"))]
     {
-        std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"))
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/"))
     }
 }
 
@@ -93,23 +95,44 @@ pub fn volumes() -> Vec<Volume> {
     {
         let mut v = crate::android::volumes();
         if v.is_empty() {
-            v.push(Volume { path: home(), label: String::new(), removable: false });
+            v.push(Volume {
+                path: home(),
+                label: String::new(),
+                removable: false,
+            });
         }
         v
     }
     #[cfg(not(target_os = "android"))]
     {
-        let mut out = vec![Volume { path: PathBuf::from("/"), label: String::new(), removable: false }];
+        let mut out = vec![Volume {
+            path: PathBuf::from("/"),
+            label: String::new(),
+            removable: false,
+        }];
         if let Ok(mounts) = std::fs::read_to_string("/proc/mounts") {
             for line in mounts.lines() {
                 let mut parts = line.split_whitespace();
-                let (Some(dev), Some(mount)) = (parts.next(), parts.next()) else { continue };
+                let (Some(dev), Some(mount)) = (parts.next(), parts.next()) else {
+                    continue;
+                };
                 let mount = mount.replace("\\040", " ");
                 // Real disks only (not bind mounts or virtual file systems).
-                if dev.starts_with("/dev/") && ["/media/", "/run/media/", "/mnt/"].iter().any(|p| mount.starts_with(p)) {
+                if dev.starts_with("/dev/")
+                    && ["/media/", "/run/media/", "/mnt/"]
+                        .iter()
+                        .any(|p| mount.starts_with(p))
+                {
                     let path = PathBuf::from(&mount);
-                    let label = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                    out.push(Volume { path, label, removable: true });
+                    let label = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    out.push(Volume {
+                        path,
+                        label,
+                        removable: true,
+                    });
                 }
             }
         }
@@ -155,7 +178,11 @@ fn open_desktop(path: &Path) -> Result<(), String> {
 
 #[cfg(all(not(target_os = "android"), not(feature = "desktop")))]
 fn open_desktop(path: &Path) -> Result<(), String> {
-    std::process::Command::new("xdg-open").arg(path).spawn().map(|_| ()).map_err(|e| e.to_string())
+    std::process::Command::new("xdg-open")
+        .arg(path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// Share local files with another app (`email`: only mail apps, as attachments).
@@ -171,7 +198,10 @@ pub fn share(paths: &[PathBuf], email: bool) -> Result<(), String> {
             for p in paths {
                 cmd.arg("--attach").arg(p);
             }
-            return cmd.spawn().map(|_| ()).map_err(|e| format!("xdg-email: {e}"));
+            return cmd
+                .spawn()
+                .map(|_| ())
+                .map_err(|e| format!("xdg-email: {e}"));
         }
         // No share sheet on a desktop: show the files in the system's file manager.
         match paths.first().and_then(|p| p.parent()) {
@@ -194,7 +224,9 @@ pub fn copy_text(ctx: &egui::Context, text: String) {
     #[cfg(target_os = "android")]
     {
         let _ = ctx;
-        let _ = craft_android::android::clipboard::set(craft_android::android::clipboard::Clip::Text(text));
+        let _ = craft_android::android::clipboard::set(
+            craft_android::android::clipboard::Clip::Text(text),
+        );
     }
     #[cfg(not(target_os = "android"))]
     ctx.copy_text(text);

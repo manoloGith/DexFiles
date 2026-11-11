@@ -21,7 +21,14 @@ pub enum DateFilter {
 }
 
 impl DateFilter {
-    pub const ALL: [DateFilter; 6] = [DateFilter::Any, DateFilter::Today, DateFilter::Week, DateFilter::Month, DateFilter::Year, DateFilter::OlderThanYear];
+    pub const ALL: [DateFilter; 6] = [
+        DateFilter::Any,
+        DateFilter::Today,
+        DateFilter::Week,
+        DateFilter::Month,
+        DateFilter::Year,
+        DateFilter::OlderThanYear,
+    ];
 
     pub fn key(self) -> &'static str {
         match self {
@@ -36,13 +43,16 @@ impl DateFilter {
 
     fn matches(self, modified: Option<i64>, now: i64) -> bool {
         let day = 86_400;
-        let Some(t) = modified else { return self == DateFilter::Any };
+        let Some(t) = modified else {
+            return self == DateFilter::Any;
+        };
         let age = now - t;
         match self {
             DateFilter::Any => true,
             DateFilter::Today => {
                 use chrono::{Local, TimeZone};
-                Local.timestamp_opt(t, 0).single().map(|d| d.date_naive()) == Some(Local::now().date_naive())
+                Local.timestamp_opt(t, 0).single().map(|d| d.date_naive())
+                    == Some(Local::now().date_naive())
             }
             DateFilter::Week => age <= 7 * day,
             DateFilter::Month => age <= 31 * day,
@@ -64,7 +74,14 @@ pub enum SizeFilter {
 }
 
 impl SizeFilter {
-    pub const ALL: [SizeFilter; 6] = [SizeFilter::Any, SizeFilter::Empty, SizeFilter::Small, SizeFilter::Medium, SizeFilter::Large, SizeFilter::Huge];
+    pub const ALL: [SizeFilter; 6] = [
+        SizeFilter::Any,
+        SizeFilter::Empty,
+        SizeFilter::Small,
+        SizeFilter::Medium,
+        SizeFilter::Large,
+        SizeFilter::Huge,
+    ];
 
     pub fn key(self) -> &'static str {
         match self {
@@ -111,7 +128,10 @@ pub struct Query {
 
 impl Query {
     pub fn is_filtering(&self) -> bool {
-        !self.text.trim().is_empty() || self.category.is_some() || self.date != DateFilter::Any || self.size != SizeFilter::Any
+        !self.text.trim().is_empty()
+            || self.category.is_some()
+            || self.date != DateFilter::Any
+            || self.size != SizeFilter::Any
     }
 
     /// Whether an entry's name and metadata match (content is checked separately).
@@ -150,7 +170,10 @@ pub fn name_matches(name: &str, pattern: &str) -> bool {
     let name = fold(name);
     let pattern = fold(pattern);
     if pattern.contains('*') || pattern.contains('?') {
-        return wildcard(&name.chars().collect::<Vec<_>>(), &pattern.chars().collect::<Vec<_>>());
+        return wildcard(
+            &name.chars().collect::<Vec<_>>(),
+            &pattern.chars().collect::<Vec<_>>(),
+        );
     }
     pattern.split_whitespace().all(|w| name.contains(w))
 }
@@ -200,7 +223,10 @@ impl Search {
     }
 
     pub fn snapshot(&self) -> Vec<Entry> {
-        self.results.lock().unwrap_or_else(PoisonError::into_inner).clone()
+        self.results
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 }
 
@@ -218,13 +244,19 @@ fn content_matches(e: &Entry, needle: &str) -> bool {
     }
     let cat = Category::of(&e.ext, false);
     let text = match cat {
-        Category::Document | Category::Spreadsheet | Category::Presentation => match e.location.as_local() {
-            Some(p) => crate::preview::office_text(p, 1_000_000).unwrap_or_default(),
-            None => return false,
-        },
+        Category::Document | Category::Spreadsheet | Category::Presentation => {
+            match e.location.as_local() {
+                Some(p) => crate::preview::office_text(p, 1_000_000).unwrap_or_default(),
+                None => return false,
+            }
+        }
         _ => {
-            let Ok(fs) = vfs::fs_for(&e.location) else { return false };
-            let Ok(bytes) = fs.read_head(&e.location.backend_path(), CONTENT_LIMIT) else { return false };
+            let Ok(fs) = vfs::fs_for(&e.location) else {
+                return false;
+            };
+            let Ok(bytes) = fs.read_head(&e.location.backend_path(), CONTENT_LIMIT) else {
+                return false;
+            };
             // Binary files (a NUL early on) are skipped unless their kind is text.
             if !cat.is_text() && bytes.iter().take(8000).any(|b| *b == 0) {
                 return false;
@@ -245,50 +277,64 @@ pub fn start(ctx: &egui::Context, root: Location, query: Query) -> Search {
         scanned: Arc::new(AtomicU64::new(0)),
         cancel: Arc::new(AtomicBool::new(false)),
     };
-    let (results, done, scanned, cancel) = (search.results.clone(), search.done.clone(), search.scanned.clone(), search.cancel.clone());
+    let (results, done, scanned, cancel) = (
+        search.results.clone(),
+        search.done.clone(),
+        search.scanned.clone(),
+        search.cancel.clone(),
+    );
     let ctx = ctx.clone();
-    let _ = std::thread::Builder::new().name("dexfiles-search".into()).spawn(move || {
-        let now = chrono::Utc::now().timestamp();
-        let mut stack = vec![root];
-        let mut last_repaint = std::time::Instant::now();
-        // With content search, a name match is not required: either matches.
-        let mut meta_query = query.clone();
-        if query.content {
-            meta_query.text.clear();
-        }
-        while let Some(dir) = stack.pop() {
-            if cancel.load(Ordering::SeqCst) {
-                break;
+    let _ = std::thread::Builder::new()
+        .name("dexfiles-search".into())
+        .spawn(move || {
+            let now = chrono::Utc::now().timestamp();
+            let mut stack = vec![root];
+            let mut last_repaint = std::time::Instant::now();
+            // With content search, a name match is not required: either matches.
+            let mut meta_query = query.clone();
+            if query.content {
+                meta_query.text.clear();
             }
-            let Ok(entries) = vfs::list(&dir) else { continue };
-            for e in entries {
+            while let Some(dir) = stack.pop() {
                 if cancel.load(Ordering::SeqCst) {
                     break;
                 }
-                scanned.fetch_add(1, Ordering::Relaxed);
-                if e.hidden && !query.include_hidden {
+                let Ok(entries) = vfs::list(&dir) else {
                     continue;
-                }
-                if e.kind == Kind::Dir && query.recursive && !e.symlink {
-                    stack.push(e.location.clone());
-                }
-                let hit = if query.content && !query.text.trim().is_empty() {
-                    meta_query.matches_meta(&e, now) && (name_matches(&e.name, &query.text) || content_matches(&e, &query.text))
-                } else {
-                    query.matches_meta(&e, now)
                 };
-                if hit {
-                    results.lock().unwrap_or_else(PoisonError::into_inner).push(e);
-                    if last_repaint.elapsed().as_millis() > 150 {
-                        last_repaint = std::time::Instant::now();
-                        ctx.request_repaint();
+                for e in entries {
+                    if cancel.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    scanned.fetch_add(1, Ordering::Relaxed);
+                    if e.hidden && !query.include_hidden {
+                        continue;
+                    }
+                    if e.kind == Kind::Dir && query.recursive && !e.symlink {
+                        stack.push(e.location.clone());
+                    }
+                    let hit = if query.content && !query.text.trim().is_empty() {
+                        meta_query.matches_meta(&e, now)
+                            && (name_matches(&e.name, &query.text)
+                                || content_matches(&e, &query.text))
+                    } else {
+                        query.matches_meta(&e, now)
+                    };
+                    if hit {
+                        results
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .push(e);
+                        if last_repaint.elapsed().as_millis() > 150 {
+                            last_repaint = std::time::Instant::now();
+                            ctx.request_repaint();
+                        }
                     }
                 }
             }
-        }
-        done.store(true, Ordering::SeqCst);
-        ctx.request_repaint();
-    });
+            done.store(true, Ordering::SeqCst);
+            ctx.request_repaint();
+        });
     search
 }
 
@@ -310,10 +356,19 @@ mod tests {
     fn recursive_search_finds_content() {
         let root = tempfile::tempdir().unwrap_or_else(|_| unreachable!());
         std::fs::create_dir_all(root.path().join("x/y")).unwrap_or_default();
-        std::fs::write(root.path().join("x/y/notes.txt"), "the secret word is pineapple").unwrap_or_default();
+        std::fs::write(
+            root.path().join("x/y/notes.txt"),
+            "the secret word is pineapple",
+        )
+        .unwrap_or_default();
         std::fs::write(root.path().join("other.txt"), "nothing").unwrap_or_default();
         let ctx = egui::Context::default();
-        let q = Query { text: "pineapple".into(), content: true, recursive: true, ..Default::default() };
+        let q = Query {
+            text: "pineapple".into(),
+            content: true,
+            recursive: true,
+            ..Default::default()
+        };
         let s = start(&ctx, Location::local(root.path()), q);
         for _ in 0..300 {
             if s.is_done() {

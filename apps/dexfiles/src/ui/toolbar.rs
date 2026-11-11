@@ -16,20 +16,49 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let p = app.active_pane;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
-        if icons::sym_button(ui, Sym::Sidebar, app.settings.show_sidebar, t("toggle_sidebar")).clicked() {
+        if icons::sym_button(
+            ui,
+            Sym::Sidebar,
+            app.settings.show_sidebar,
+            t("toggle_sidebar"),
+        )
+        .clicked()
+        {
             app.settings.show_sidebar = !app.settings.show_sidebar;
         }
         let (can_back, can_fwd, can_up) = {
             let tab = app.tab(p);
-            (tab.can_back(), tab.can_forward(), tab.location().parent().is_some())
+            (
+                tab.can_back(),
+                tab.can_forward(),
+                tab.location().parent().is_some(),
+            )
         };
-        if ui.add_enabled_ui(can_back, |ui| icons::sym_button(ui, Sym::Back, false, t("back_tip"))).inner.clicked() {
+        if ui
+            .add_enabled_ui(can_back, |ui| {
+                icons::sym_button(ui, Sym::Back, false, t("back_tip"))
+            })
+            .inner
+            .clicked()
+        {
             app.actions.push(Action::Back(p));
         }
-        if ui.add_enabled_ui(can_fwd, |ui| icons::sym_button(ui, Sym::Forward, false, t("forward_tip"))).inner.clicked() {
+        if ui
+            .add_enabled_ui(can_fwd, |ui| {
+                icons::sym_button(ui, Sym::Forward, false, t("forward_tip"))
+            })
+            .inner
+            .clicked()
+        {
             app.actions.push(Action::Forward(p));
         }
-        if ui.add_enabled_ui(can_up, |ui| icons::sym_button(ui, Sym::Up, false, t("up_tip"))).inner.clicked() {
+        if ui
+            .add_enabled_ui(can_up, |ui| {
+                icons::sym_button(ui, Sym::Up, false, t("up_tip"))
+            })
+            .inner
+            .clicked()
+        {
             app.actions.push(Action::Up(p));
         }
         ui.add_space(4.0);
@@ -41,7 +70,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         if !app.narrow {
             view_buttons(app, ui, p);
         }
-        ui.menu_button_sym(Sym::Sort, t("sort_by"), |ui| super::view::sort_menu(app, ui));
+        ui.menu_button_sym(Sym::Sort, t("sort_by"), |ui| {
+            super::view::sort_menu(app, ui)
+        });
         search_field(app, ui, p);
         more_menu(app, ui, p);
     });
@@ -64,32 +95,44 @@ impl MenuSym for Ui {
 fn view_buttons(app: &mut App, ui: &mut Ui, p: usize) {
     let current = app.view_mode(p);
     let pal = theme::palette(app.dark);
-    egui::Frame::new().fill(pal.sidebar).corner_radius(CornerRadius::same(8)).inner_margin(2).show(ui, |ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        let icons_on = current.is_grid();
-        let resp = icons::sym_button(ui, Sym::Grid, icons_on, t("view_icons"));
-        if resp.clicked() {
-            let next = match current {
-                ViewMode::LargeIcons => ViewMode::MediumIcons,
-                ViewMode::MediumIcons => ViewMode::SmallIcons,
-                ViewMode::SmallIcons => ViewMode::LargeIcons,
-                _ => ViewMode::MediumIcons,
-            };
-            app.actions.push(Action::SetView(next));
-        }
-        resp.context_menu(|ui| {
-            for v in [ViewMode::LargeIcons, ViewMode::MediumIcons, ViewMode::SmallIcons] {
-                if ui.radio(current == v, t(v.key())).clicked() {
+    egui::Frame::new()
+        .fill(pal.sidebar)
+        .corner_radius(CornerRadius::same(8))
+        .inner_margin(2)
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            let icons_on = current.is_grid();
+            let resp = icons::sym_button(ui, Sym::Grid, icons_on, t("view_icons"));
+            if resp.clicked() {
+                let next = match current {
+                    ViewMode::LargeIcons => ViewMode::MediumIcons,
+                    ViewMode::MediumIcons => ViewMode::SmallIcons,
+                    ViewMode::SmallIcons => ViewMode::LargeIcons,
+                    _ => ViewMode::MediumIcons,
+                };
+                app.actions.push(Action::SetView(next));
+            }
+            resp.context_menu(|ui| {
+                for v in [
+                    ViewMode::LargeIcons,
+                    ViewMode::MediumIcons,
+                    ViewMode::SmallIcons,
+                ] {
+                    if ui.radio(current == v, t(v.key())).clicked() {
+                        app.actions.push(Action::SetView(v));
+                    }
+                }
+            });
+            for (v, s) in [
+                (ViewMode::List, Sym::List),
+                (ViewMode::Details, Sym::Details),
+                (ViewMode::Content, Sym::Content),
+            ] {
+                if icons::sym_button(ui, s, current == v, t(v.key())).clicked() {
                     app.actions.push(Action::SetView(v));
                 }
             }
         });
-        for (v, s) in [(ViewMode::List, Sym::List), (ViewMode::Details, Sym::Details), (ViewMode::Content, Sym::Content)] {
-            if icons::sym_button(ui, s, current == v, t(v.key())).clicked() {
-                app.actions.push(Action::SetView(v));
-            }
-        }
-    });
 }
 
 /// Breadcrumbs of the path: (label, location) from the top.
@@ -112,7 +155,14 @@ fn crumbs(app: &App, loc: &Location) -> Vec<(String, Location)> {
                     break;
                 }
                 let name = l.name();
-                out.push((if name.is_empty() { "/".to_owned() } else { name }, l.clone()));
+                out.push((
+                    if name.is_empty() {
+                        "/".to_owned()
+                    } else {
+                        name
+                    },
+                    l.clone(),
+                ));
                 cur = l.parent();
             }
             out.reverse();
@@ -136,11 +186,32 @@ fn address_bar(app: &mut App, ui: &mut Ui, p: usize, width: f32) {
     let height = 30.0;
     let (rect, resp) = ui.allocate_exact_size(vec2(width, height), Sense::click());
     let editing = app.address_edit.is_some();
-    ui.painter().rect(rect, CornerRadius::same(8), ui.visuals().extreme_bg_color, Stroke::new(1.0, if editing { theme::ACCENT } else { pal.separator }), egui::StrokeKind::Inside);
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect.shrink2(vec2(6.0, 2.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    ui.painter().rect(
+        rect,
+        CornerRadius::same(8),
+        ui.visuals().extreme_bg_color,
+        Stroke::new(
+            1.0,
+            if editing {
+                theme::ACCENT
+            } else {
+                pal.separator
+            },
+        ),
+        egui::StrokeKind::Inside,
+    );
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect.shrink2(vec2(6.0, 2.0)))
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+    );
     child.set_clip_rect(rect);
     if let Some(mut text) = app.address_edit.take() {
-        let edit = egui::TextEdit::singleline(&mut text).frame(egui::Frame::NONE).desired_width(rect.width() - 50.0).font(FontId::proportional(14.0)).hint_text(t("address_hint"));
+        let edit = egui::TextEdit::singleline(&mut text)
+            .frame(egui::Frame::NONE)
+            .desired_width(rect.width() - 50.0)
+            .font(FontId::proportional(14.0))
+            .hint_text(t("address_hint"));
         let r = child.add(edit);
         if app.focus_address {
             r.request_focus();
@@ -148,7 +219,12 @@ fn address_bar(app: &mut App, ui: &mut Ui, p: usize, width: f32) {
             // Select it all, so typing replaces it.
             if let Some(mut state) = egui::TextEdit::load_state(child.ctx(), r.id) {
                 let n = text.chars().count();
-                state.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(n))));
+                state
+                    .cursor
+                    .set_char_range(Some(egui::text::CCursorRange::two(
+                        egui::text::CCursor::new(0),
+                        egui::text::CCursor::new(n),
+                    )));
                 state.store(child.ctx(), r.id);
             }
         }
@@ -168,7 +244,10 @@ fn address_bar(app: &mut App, ui: &mut Ui, p: usize, width: f32) {
     let mut shown = list.len();
     // Keep the last parts when the path is long.
     let budget = rect.width() - 60.0;
-    let widths: Vec<f32> = list.iter().map(|(l, _)| l.chars().count() as f32 * 7.5 + 26.0).collect();
+    let widths: Vec<f32> = list
+        .iter()
+        .map(|(l, _)| l.chars().count() as f32 * 7.5 + 26.0)
+        .collect();
     while shown > 1 && widths[list.len() - shown..].iter().sum::<f32>() > budget {
         shown -= 1;
     }
@@ -181,17 +260,35 @@ fn address_bar(app: &mut App, ui: &mut Ui, p: usize, width: f32) {
     for (label, loc) in list.into_iter().skip(skipped) {
         if !first {
             let (r, _) = child.allocate_exact_size(vec2(14.0, height), Sense::hover());
-            icons::sym(child.painter(), egui::Rect::from_center_size(r.center(), Vec2::splat(12.0)), Sym::Forward, pal.weak);
+            icons::sym(
+                child.painter(),
+                egui::Rect::from_center_size(r.center(), Vec2::splat(12.0)),
+                Sym::Forward,
+                pal.weak,
+            );
         }
         first = false;
         let last = loc == here;
-        let text = if last { egui::RichText::new(label).strong() } else { egui::RichText::new(label) };
-        let b = child.add(egui::Button::new(text).frame(false).min_size(vec2(0.0, 24.0)));
+        let text = if last {
+            egui::RichText::new(label).strong()
+        } else {
+            egui::RichText::new(label)
+        };
+        let b = child.add(
+            egui::Button::new(text)
+                .frame(false)
+                .min_size(vec2(0.0, 24.0)),
+        );
         if b.clicked() && !last {
             app.actions.push(Action::Navigate(p, loc.clone()));
         }
         if loc != Location::Trash {
-            app.drop_targets.push(DropTarget { rect: b.rect, dest: loc.clone(), priority: 3, trash: false });
+            app.drop_targets.push(DropTarget {
+                rect: b.rect,
+                dest: loc.clone(),
+                priority: 3,
+                trash: false,
+            });
         }
         b.context_menu(|ui| {
             if ui.button(t("open_new_tab")).clicked() {
@@ -203,9 +300,27 @@ fn address_bar(app: &mut App, ui: &mut Ui, p: usize, width: f32) {
         });
     }
     // Copy and edit buttons at the right end.
-    let copy_rect = egui::Rect::from_center_size(pos2(rect.right() - 16.0, rect.center().y), Vec2::splat(24.0));
-    let copy = ui.interact(copy_rect, ui.scope_id().with("copy-address"), Sense::click()).on_hover_text(t("copy_address"));
-    icons::sym(ui.painter(), copy_rect.shrink(4.0), Sym::Copy, if copy.hovered() { theme::ACCENT } else { pal.weak });
+    let copy_rect = egui::Rect::from_center_size(
+        pos2(rect.right() - 16.0, rect.center().y),
+        Vec2::splat(24.0),
+    );
+    let copy = ui
+        .interact(
+            copy_rect,
+            ui.scope_id().with("copy-address"),
+            Sense::click(),
+        )
+        .on_hover_text(t("copy_address"));
+    icons::sym(
+        ui.painter(),
+        copy_rect.shrink(4.0),
+        Sym::Copy,
+        if copy.hovered() {
+            theme::ACCENT
+        } else {
+            pal.weak
+        },
+    );
     if copy.clicked() {
         app.actions.push(Action::CopyPath(vec![here.clone()]));
     }
@@ -227,16 +342,26 @@ fn go_to_address(app: &mut App, p: usize, text: &str) {
     }
     if let Some(url) = vfs::servers::parse_url(text) {
         let found = app.settings.servers.iter().find(|s| {
-            s.kind == url.kind && s.host.eq_ignore_ascii_case(&url.host) && s.port == url.port && (url.user.is_empty() || s.user == url.user)
+            s.kind == url.kind
+                && s.host.eq_ignore_ascii_case(&url.host)
+                && s.port == url.port
+                && (url.user.is_empty() || s.user == url.user)
         });
         if let Some(s) = found {
             // For SMB and WebDAV the first part of the path is the share / base.
             let base = s.share.trim_matches('/');
             let mut path = url.path.clone();
-            if !base.is_empty() && let Some(rest) = path.strip_prefix(&format!("/{base}")) {
-                path = if rest.is_empty() { "/".to_owned() } else { rest.to_owned() };
+            if !base.is_empty()
+                && let Some(rest) = path.strip_prefix(&format!("/{base}"))
+            {
+                path = if rest.is_empty() {
+                    "/".to_owned()
+                } else {
+                    rest.to_owned()
+                };
             }
-            app.actions.push(Action::Navigate(p, Location::Remote { server: s.id, path }));
+            app.actions
+                .push(Action::Navigate(p, Location::Remote { server: s.id, path }));
         } else {
             let id = app.settings.new_server_id();
             let mut s = vfs::Server::new(id, url.kind);
@@ -254,7 +379,11 @@ fn go_to_address(app: &mut App, p: usize, text: &str) {
         }
         return;
     }
-    let path = if let Some(rest) = text.strip_prefix('~') { format!("{}{rest}", crate::platform::home().display()) } else { text.to_owned() };
+    let path = if let Some(rest) = text.strip_prefix('~') {
+        format!("{}{rest}", crate::platform::home().display())
+    } else {
+        text.to_owned()
+    };
     let path = std::path::PathBuf::from(path);
     if path.exists() {
         app.actions.push(Action::Navigate(p, Location::Local(path)));
@@ -267,13 +396,36 @@ fn search_field(app: &mut App, ui: &mut Ui, p: usize) {
     let pal = theme::palette(app.dark);
     let w = if app.narrow { 90.0 } else { 220.0 };
     let (rect, _) = ui.allocate_exact_size(vec2(w, 30.0), Sense::hover());
-    ui.painter().rect(rect, CornerRadius::same(8), ui.visuals().extreme_bg_color, Stroke::new(1.0, pal.separator), egui::StrokeKind::Inside);
-    icons::sym(ui.painter(), egui::Rect::from_center_size(pos2(rect.left() + 14.0, rect.center().y), Vec2::splat(16.0)), Sym::Search, pal.weak);
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(egui::Rect::from_min_max(pos2(rect.left() + 26.0, rect.top() + 3.0), pos2(rect.right() - 28.0, rect.bottom() - 3.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    ui.painter().rect(
+        rect,
+        CornerRadius::same(8),
+        ui.visuals().extreme_bg_color,
+        Stroke::new(1.0, pal.separator),
+        egui::StrokeKind::Inside,
+    );
+    icons::sym(
+        ui.painter(),
+        egui::Rect::from_center_size(pos2(rect.left() + 14.0, rect.center().y), Vec2::splat(16.0)),
+        Sym::Search,
+        pal.weak,
+    );
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(egui::Rect::from_min_max(
+                pos2(rect.left() + 26.0, rect.top() + 3.0),
+                pos2(rect.right() - 28.0, rect.bottom() - 3.0),
+            ))
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+    );
     let here = super::pane::location_title(app.tab(p).location());
     let tab = app.tab_mut(p);
     let mut text = tab.query.text.clone();
-    let r = child.add(egui::TextEdit::singleline(&mut text).frame(egui::Frame::NONE).hint_text(tf("search_in", here)).desired_width(f32::INFINITY));
+    let r = child.add(
+        egui::TextEdit::singleline(&mut text)
+            .frame(egui::Frame::NONE)
+            .hint_text(tf("search_in", here))
+            .desired_width(f32::INFINITY),
+    );
     if app.focus_search {
         r.request_focus();
         app.focus_search = false;
@@ -294,59 +446,96 @@ fn search_field(app: &mut App, ui: &mut Ui, p: usize) {
         app.actions.push(Action::ClearSearch(p));
     }
     // Filters
-    let fr = egui::Rect::from_center_size(pos2(rect.right() - 14.0, rect.center().y), Vec2::splat(22.0));
-    let fresp = ui.interact(fr, ui.scope_id().with(("search-filters", p)), Sense::click()).on_hover_text(t("search_options"));
+    let fr = egui::Rect::from_center_size(
+        pos2(rect.right() - 14.0, rect.center().y),
+        Vec2::splat(22.0),
+    );
+    let fresp = ui
+        .interact(
+            fr,
+            ui.scope_id().with(("search-filters", p)),
+            Sense::click(),
+        )
+        .on_hover_text(t("search_options"));
     let active = {
         let q = &app.tab(p).query;
         q.content || q.category.is_some() || q.date != DateFilter::Any || q.size != SizeFilter::Any
     };
-    icons::sym(ui.painter(), fr.shrink(3.0), Sym::Settings, if active || fresp.hovered() { theme::ACCENT } else { pal.weak });
-    egui::Popup::menu(&fresp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-        ui.set_min_width(260.0);
-        ui.label(egui::RichText::new(t("search_options")).strong());
-        let tab = app.tab_mut(p);
-        ui.horizontal(|ui| {
-            ui.radio_value(&mut tab.query.content, false, t("by_name"));
-            ui.radio_value(&mut tab.query.content, true, t("by_content"));
-        });
-        egui::Grid::new("search-grid").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
-            ui.label(t("col_kind"));
-            egui::ComboBox::from_id_salt("q-kind").selected_text(tab.query.category.map(|c| t(c.key())).unwrap_or(t("any_kind"))).show_ui(ui, |ui| {
-                ui.selectable_value(&mut tab.query.category, None, t("any_kind"));
-                for c in Category::FILTERS {
-                    ui.selectable_value(&mut tab.query.category, Some(c), t(c.key()));
+    icons::sym(
+        ui.painter(),
+        fr.shrink(3.0),
+        Sym::Settings,
+        if active || fresp.hovered() {
+            theme::ACCENT
+        } else {
+            pal.weak
+        },
+    );
+    egui::Popup::menu(&fresp)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            ui.set_min_width(260.0);
+            ui.label(egui::RichText::new(t("search_options")).strong());
+            let tab = app.tab_mut(p);
+            ui.horizontal(|ui| {
+                ui.radio_value(&mut tab.query.content, false, t("by_name"));
+                ui.radio_value(&mut tab.query.content, true, t("by_content"));
+            });
+            egui::Grid::new("search-grid")
+                .num_columns(2)
+                .spacing([8.0, 6.0])
+                .show(ui, |ui| {
+                    ui.label(t("col_kind"));
+                    egui::ComboBox::from_id_salt("q-kind")
+                        .selected_text(
+                            tab.query
+                                .category
+                                .map(|c| t(c.key()))
+                                .unwrap_or(t("any_kind")),
+                        )
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut tab.query.category, None, t("any_kind"));
+                            for c in Category::FILTERS {
+                                ui.selectable_value(&mut tab.query.category, Some(c), t(c.key()));
+                            }
+                        });
+                    ui.end_row();
+                    ui.label(t("col_modified"));
+                    egui::ComboBox::from_id_salt("q-date")
+                        .selected_text(t(tab.query.date.key()))
+                        .show_ui(ui, |ui| {
+                            for d in DateFilter::ALL {
+                                ui.selectable_value(&mut tab.query.date, d, t(d.key()));
+                            }
+                        });
+                    ui.end_row();
+                    ui.label(t("col_size"));
+                    egui::ComboBox::from_id_salt("q-size")
+                        .selected_text(t(tab.query.size.key()))
+                        .show_ui(ui, |ui| {
+                            for s in SizeFilter::ALL {
+                                ui.selectable_value(&mut tab.query.size, s, t(s.key()));
+                            }
+                        });
+                    ui.end_row();
+                });
+            ui.small(egui::RichText::new(t("search_hint")).color(pal.weak));
+            ui.separator();
+            ui.horizontal(|ui| {
+                if ui
+                    .button(egui::RichText::new(t("search_below")).color(Color32::WHITE))
+                    .clicked()
+                {
+                    app.actions.push(Action::Search(p));
+                    ui.close();
+                }
+                if ui.button(t("reset")).clicked() {
+                    app.actions.push(Action::ClearSearch(p));
+                    let tab = app.tab_mut(p);
+                    tab.query = Default::default();
                 }
             });
-            ui.end_row();
-            ui.label(t("col_modified"));
-            egui::ComboBox::from_id_salt("q-date").selected_text(t(tab.query.date.key())).show_ui(ui, |ui| {
-                for d in DateFilter::ALL {
-                    ui.selectable_value(&mut tab.query.date, d, t(d.key()));
-                }
-            });
-            ui.end_row();
-            ui.label(t("col_size"));
-            egui::ComboBox::from_id_salt("q-size").selected_text(t(tab.query.size.key())).show_ui(ui, |ui| {
-                for s in SizeFilter::ALL {
-                    ui.selectable_value(&mut tab.query.size, s, t(s.key()));
-                }
-            });
-            ui.end_row();
         });
-        ui.small(egui::RichText::new(t("search_hint")).color(pal.weak));
-        ui.separator();
-        ui.horizontal(|ui| {
-            if ui.button(egui::RichText::new(t("search_below")).color(Color32::WHITE)).clicked() {
-                app.actions.push(Action::Search(p));
-                ui.close();
-            }
-            if ui.button(t("reset")).clicked() {
-                app.actions.push(Action::ClearSearch(p));
-                let tab = app.tab_mut(p);
-                tab.query = Default::default();
-            }
-        });
-    });
 }
 
 fn more_menu(app: &mut App, ui: &mut Ui, p: usize) {
@@ -354,7 +543,14 @@ fn more_menu(app: &mut App, ui: &mut Ui, p: usize) {
         if icons::sym_button(ui, Sym::DualPane, app.settings.dual_pane, t("dual_pane")).clicked() {
             app.settings.dual_pane = !app.settings.dual_pane;
         }
-        if icons::sym_button(ui, Sym::Preview, app.settings.show_preview, t("preview_panel")).clicked() {
+        if icons::sym_button(
+            ui,
+            Sym::Preview,
+            app.settings.show_preview,
+            t("preview_panel"),
+        )
+        .clicked()
+        {
             app.settings.show_preview = !app.settings.show_preview;
         }
     }
@@ -388,10 +584,16 @@ fn more_menu(app: &mut App, ui: &mut Ui, p: usize) {
                 }
             });
         }
-        if ui.checkbox(&mut app.settings.show_hidden, t("show_hidden")).changed() {
+        if ui
+            .checkbox(&mut app.settings.show_hidden, t("show_hidden"))
+            .changed()
+        {
             app.mark_dirty();
         }
-        if ui.checkbox(&mut app.settings.show_extensions, t("show_extensions")).changed() {
+        if ui
+            .checkbox(&mut app.settings.show_extensions, t("show_extensions"))
+            .changed()
+        {
             app.mark_dirty();
         }
         ui.checkbox(&mut app.settings.dual_pane, t("dual_pane"));

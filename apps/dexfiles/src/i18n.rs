@@ -12,7 +12,9 @@ pub fn set_language(choice: crate::settings::Language) {
         crate::settings::Language::Spanish => ES,
         crate::settings::Language::English => EN,
         crate::settings::Language::Auto => {
-            let env = std::env::var("LANG").or_else(|_| std::env::var("LC_ALL")).unwrap_or_default();
+            let env = std::env::var("LANG")
+                .or_else(|_| std::env::var("LC_ALL"))
+                .unwrap_or_default();
             if env.starts_with("es") { ES } else { EN }
         }
     };

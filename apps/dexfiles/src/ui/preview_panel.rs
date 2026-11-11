@@ -14,8 +14,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let p = app.active_pane;
     let sel = app.tab(p).selected_entries();
     let pal = theme::palette(app.dark);
-    egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-        match sel.len() {
+    egui::ScrollArea::vertical()
+        .auto_shrink(false)
+        .show(ui, |ui| match sel.len() {
             0 => {
                 let tab = app.tab(p);
                 let title = tab.title();
@@ -44,8 +45,17 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     let (r, _) = ui.allocate_exact_size(Vec2::splat(96.0), egui::Sense::hover());
                     for (i, e) in sel.iter().take(3).enumerate().rev() {
                         let off = i as f32 * 8.0;
-                        let rr = egui::Rect::from_min_size(r.min + egui::vec2(off, -off + 16.0), Vec2::splat(80.0));
-                        super::icons::file_icon(ui.painter(), rr, Category::of(&e.ext, e.is_dir()), &e.ext, app.dark);
+                        let rr = egui::Rect::from_min_size(
+                            r.min + egui::vec2(off, -off + 16.0),
+                            Vec2::splat(80.0),
+                        );
+                        super::icons::file_icon(
+                            ui.painter(),
+                            rr,
+                            Category::of(&e.ext, e.is_dir()),
+                            &e.ext,
+                            app.dark,
+                        );
                     }
                     ui.add_space(8.0);
                     ui.label(RichText::new(tf("n_selected", n)).strong().size(16.0));
@@ -54,14 +64,14 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     }
                 });
             }
-        }
-    });
+        });
 }
 
 fn header(app: &mut App, ui: &mut Ui, e: &Entry) {
     let pal = theme::palette(app.dark);
     ui.vertical_centered(|ui| {
-        let has_image = matches!(app.preview.content, Some(Content::Image { .. })) && app.preview.texture.is_some();
+        let has_image = matches!(app.preview.content, Some(Content::Image { .. }))
+            && app.preview.texture.is_some();
         if !has_image {
             let (r, _) = ui.allocate_exact_size(Vec2::splat(96.0), egui::Sense::hover());
             super::view::entry_icon(app, ui, r, e, true);
@@ -80,7 +90,8 @@ fn header(app: &mut App, ui: &mut Ui, e: &Entry) {
                 app.actions.push(Action::Open(p, e.clone()));
             }
             if !e.is_dir() && ui.button(t("share")).clicked() {
-                app.actions.push(Action::Share(vec![e.location.clone()], false));
+                app.actions
+                    .push(Action::Share(vec![e.location.clone()], false));
             }
             if ui.button(t("properties")).clicked() {
                 app.actions.push(Action::Properties(e.clone()));
@@ -98,45 +109,96 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
     }
     let width = ui.available_width();
     match &app.preview.content {
-        Some(Content::Image { width: w, height: h, .. }) => {
+        Some(Content::Image {
+            width: w,
+            height: h,
+            ..
+        }) => {
             if let Some(tex) = &app.preview.texture {
                 let size = tex.size_vec2();
-                let max_h = if large { ui.available_height().max(300.0) } else { 420.0 };
-                let scale = (width / size.x).min(max_h / size.y).min(if large { 4.0 } else { 1.0 });
+                let max_h = if large {
+                    ui.available_height().max(300.0)
+                } else {
+                    420.0
+                };
+                let scale = (width / size.x)
+                    .min(max_h / size.y)
+                    .min(if large { 4.0 } else { 1.0 });
                 ui.vertical_centered(|ui| {
-                    ui.add(egui::Image::from_texture(tex).fit_to_exact_size(size * scale).corner_radius(6));
-                    ui.label(RichText::new(format!("{w} × {h} px")).color(pal.weak).small());
+                    ui.add(
+                        egui::Image::from_texture(tex)
+                            .fit_to_exact_size(size * scale)
+                            .corner_radius(6),
+                    );
+                    ui.label(
+                        RichText::new(format!("{w} × {h} px"))
+                            .color(pal.weak)
+                            .small(),
+                    );
                 });
             }
         }
         Some(Content::Text { text, truncated }) | Some(Content::Document { text, truncated }) => {
             let mono = matches!(app.preview.content, Some(Content::Text { .. }));
-            let shown: String = if large { text.clone() } else { text.chars().take(8000).collect() };
-            egui::Frame::new().fill(ui.visuals().extreme_bg_color).corner_radius(6).inner_margin(8).show(ui, |ui| {
-                let rt = if mono { RichText::new(shown).monospace().size(12.0) } else { RichText::new(shown).size(13.0) };
-                ui.add(egui::Label::new(rt).wrap());
-            });
+            let shown: String = if large {
+                text.clone()
+            } else {
+                text.chars().take(8000).collect()
+            };
+            egui::Frame::new()
+                .fill(ui.visuals().extreme_bg_color)
+                .corner_radius(6)
+                .inner_margin(8)
+                .show(ui, |ui| {
+                    let rt = if mono {
+                        RichText::new(shown).monospace().size(12.0)
+                    } else {
+                        RichText::new(shown).size(13.0)
+                    };
+                    ui.add(egui::Label::new(rt).wrap());
+                });
             if *truncated {
-                ui.label(RichText::new(t("preview_truncated")).small().color(pal.weak));
+                ui.label(
+                    RichText::new(t("preview_truncated"))
+                        .small()
+                        .color(pal.weak),
+                );
             }
         }
-        Some(Content::Table { sheets, rows, truncated }) => {
+        Some(Content::Table {
+            sheets,
+            rows,
+            truncated,
+        }) => {
             if sheets.len() > 1 {
-                ui.label(RichText::new(tf("sheets", sheets.join(", "))).small().color(pal.weak));
+                ui.label(
+                    RichText::new(tf("sheets", sheets.join(", ")))
+                        .small()
+                        .color(pal.weak),
+                );
             }
-            egui::ScrollArea::horizontal().id_salt(("table", large)).show(ui, |ui| {
-                egui::Grid::new(("table-grid", large)).striped(true).spacing([10.0, 3.0]).show(ui, |ui| {
-                    for row in rows.iter().take(if large { 200 } else { 40 }) {
-                        for cell in row {
-                            let c: String = cell.chars().take(40).collect();
-                            ui.label(RichText::new(c).size(12.0));
-                        }
-                        ui.end_row();
-                    }
+            egui::ScrollArea::horizontal()
+                .id_salt(("table", large))
+                .show(ui, |ui| {
+                    egui::Grid::new(("table-grid", large))
+                        .striped(true)
+                        .spacing([10.0, 3.0])
+                        .show(ui, |ui| {
+                            for row in rows.iter().take(if large { 200 } else { 40 }) {
+                                for cell in row {
+                                    let c: String = cell.chars().take(40).collect();
+                                    ui.label(RichText::new(c).size(12.0));
+                                }
+                                ui.end_row();
+                            }
+                        });
                 });
-            });
             if *truncated {
-                ui.label(RichText::new(t("preview_truncated")).small().color(pal.weak));
+                ui.label(
+                    RichText::new(t("preview_truncated"))
+                        .small()
+                        .color(pal.weak),
+                );
             }
         }
         Some(Content::Archive { items, count }) => {
@@ -145,16 +207,33 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
                 ui.horizontal(|ui| {
                     let (r, _) = ui.allocate_exact_size(Vec2::splat(14.0), egui::Sense::hover());
                     let ext = crate::vfs::extension(&it.name);
-                    super::icons::file_icon(ui.painter(), r, Category::of(&ext, it.is_dir), &ext, app.dark);
+                    super::icons::file_icon(
+                        ui.painter(),
+                        r,
+                        Category::of(&ext, it.is_dir),
+                        &ext,
+                        app.dark,
+                    );
                     ui.label(RichText::new(&it.name).size(12.0));
                     if !it.is_dir {
-                        ui.label(RichText::new(fileinfo::format_size(it.size)).size(11.0).color(pal.weak));
+                        ui.label(
+                            RichText::new(fileinfo::format_size(it.size))
+                                .size(11.0)
+                                .color(pal.weak),
+                        );
                     }
                 });
             }
         }
         Some(Content::Folder { items, folders }) => {
-            ui.label(RichText::new(format!("{} · {}", tf("n_items", items), tf("n_folders", folders))).color(pal.weak));
+            ui.label(
+                RichText::new(format!(
+                    "{} · {}",
+                    tf("n_items", items),
+                    tf("n_folders", folders)
+                ))
+                .color(pal.weak),
+            );
         }
         Some(Content::None(key)) => {
             ui.vertical_centered(|ui| ui.label(RichText::new(t(key)).color(pal.weak)));
@@ -171,38 +250,44 @@ fn details(app: &App, ui: &mut Ui, e: &Entry) {
     let pal = theme::palette(app.dark);
     ui.label(RichText::new(t("information")).strong());
     ui.separator();
-    egui::Grid::new("preview-details").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-        let mut line = |k: &str, v: String| {
-            ui.label(RichText::new(t(k)).color(pal.weak));
-            ui.add(egui::Label::new(v).wrap());
-            ui.end_row();
-        };
-        line("col_kind", fileinfo::kind_label(&e.ext, e.is_dir()));
-        if !e.is_dir() {
-            line("col_size", format!("{} ({} B)", fileinfo::format_size(e.size), e.size));
-        }
-        line("col_modified", fileinfo::format_date_long(e.modified));
-        if e.created.is_some() {
-            line("created", fileinfo::format_date_long(e.created));
-        }
-        if let Some(tr) = &e.trash {
-            line("original_location", tr.original.display().to_string());
-            line("deleted_on", fileinfo::format_date_long(tr.deleted));
-        } else if let Some(parent) = e.location.parent() {
-            line("where", parent.address(&app.settings.servers));
-        }
-        let mut attrs = Vec::new();
-        if e.readonly {
-            attrs.push(t("readonly"));
-        }
-        if e.hidden {
-            attrs.push(t("hidden"));
-        }
-        if e.symlink {
-            attrs.push(t("symlink"));
-        }
-        if !attrs.is_empty() {
-            line("col_status", attrs.join(", "));
-        }
-    });
+    egui::Grid::new("preview-details")
+        .num_columns(2)
+        .spacing([10.0, 4.0])
+        .show(ui, |ui| {
+            let mut line = |k: &str, v: String| {
+                ui.label(RichText::new(t(k)).color(pal.weak));
+                ui.add(egui::Label::new(v).wrap());
+                ui.end_row();
+            };
+            line("col_kind", fileinfo::kind_label(&e.ext, e.is_dir()));
+            if !e.is_dir() {
+                line(
+                    "col_size",
+                    format!("{} ({} B)", fileinfo::format_size(e.size), e.size),
+                );
+            }
+            line("col_modified", fileinfo::format_date_long(e.modified));
+            if e.created.is_some() {
+                line("created", fileinfo::format_date_long(e.created));
+            }
+            if let Some(tr) = &e.trash {
+                line("original_location", tr.original.display().to_string());
+                line("deleted_on", fileinfo::format_date_long(tr.deleted));
+            } else if let Some(parent) = e.location.parent() {
+                line("where", parent.address(&app.settings.servers));
+            }
+            let mut attrs = Vec::new();
+            if e.readonly {
+                attrs.push(t("readonly"));
+            }
+            if e.hidden {
+                attrs.push(t("hidden"));
+            }
+            if e.symlink {
+                attrs.push(t("symlink"));
+            }
+            if !attrs.is_empty() {
+                line("col_status", attrs.join(", "));
+            }
+        });
 }

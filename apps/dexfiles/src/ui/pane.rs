@@ -141,11 +141,17 @@ impl Tab {
     }
 
     pub fn source(&self) -> &[Entry] {
-        if self.search.is_some() { &self.search_results } else { &self.entries }
+        if self.search.is_some() {
+            &self.search_results
+        } else {
+            &self.entries
+        }
     }
 
     pub fn item(&self, visible_index: usize) -> Option<&Entry> {
-        self.visible.get(visible_index).and_then(|&i| self.source().get(i))
+        self.visible
+            .get(visible_index)
+            .and_then(|&i| self.source().get(i))
     }
 
     pub fn items(&self) -> impl Iterator<Item = &Entry> {
@@ -153,22 +159,35 @@ impl Tab {
     }
 
     pub fn selected_entries(&self) -> Vec<Entry> {
-        self.items().filter(|e| self.selected.contains(&e.location)).cloned().collect()
+        self.items()
+            .filter(|e| self.selected.contains(&e.location))
+            .cloned()
+            .collect()
     }
 
     pub fn selected_locations(&self) -> Vec<Location> {
-        self.items().filter(|e| self.selected.contains(&e.location)).map(|e| e.location.clone()).collect()
+        self.items()
+            .filter(|e| self.selected.contains(&e.location))
+            .map(|e| e.location.clone())
+            .collect()
     }
 
     /// Re-sort and re-filter.
-    pub fn refresh_visible(&mut self, sort: SortKey, descending: bool, folders_first: bool, show_hidden: bool) {
+    pub fn refresh_visible(
+        &mut self,
+        sort: SortKey,
+        descending: bool,
+        folders_first: bool,
+        show_hidden: bool,
+    ) {
         let now = chrono::Utc::now().timestamp();
         let filter = self.filter.trim().to_owned();
         let source = self.source();
         let mut visible: Vec<usize> = (0..source.len())
             .filter(|&i| {
                 let e = &source[i];
-                (show_hidden || !e.hidden || self.search.is_some()) && (filter.is_empty() || crate::search::name_matches(&e.name, &filter))
+                (show_hidden || !e.hidden || self.search.is_some())
+                    && (filter.is_empty() || crate::search::name_matches(&e.name, &filter))
             })
             .collect();
         visible.sort_by(|&a, &b| compare(&source[a], &source[b], sort, descending, folders_first));
@@ -177,7 +196,12 @@ impl Tab {
         self.dirty = false;
         // Keep only what is still there selected.
         let present: HashSet<&Location> = self.items().map(|e| &e.location).collect();
-        let keep: HashSet<Location> = self.selected.iter().filter(|l| present.contains(l)).cloned().collect();
+        let keep: HashSet<Location> = self
+            .selected
+            .iter()
+            .filter(|l| present.contains(l))
+            .cloned()
+            .collect();
         self.selected = keep;
         self.cursor = self.cursor.filter(|&c| c < self.visible.len());
         if !self.pending_select.is_empty() {
@@ -224,7 +248,11 @@ impl Tab {
         if !add {
             self.selected.clear();
         }
-        let (a, b) = if anchor <= index { (anchor, index) } else { (index, anchor) };
+        let (a, b) = if anchor <= index {
+            (anchor, index)
+        } else {
+            (index, anchor)
+        };
         for i in a..=b {
             if let Some(l) = self.item(i).map(|e| e.location.clone()) {
                 self.selected.insert(l);
@@ -239,7 +267,10 @@ impl Tab {
     }
 
     pub fn total_selected_size(&self) -> u64 {
-        self.items().filter(|e| self.selected.contains(&e.location) && !e.is_dir()).map(|e| e.size).sum()
+        self.items()
+            .filter(|e| self.selected.contains(&e.location) && !e.is_dir())
+            .map(|e| e.size)
+            .sum()
     }
 }
 
@@ -255,12 +286,16 @@ pub fn location_title(l: &Location) -> String {
                     return volume_label(&v);
                 }
             }
-            p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "/".to_owned())
+            p.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "/".to_owned())
         }
         Location::Remote { server, path } => {
             let name = l.name();
             if name.is_empty() || path == "/" {
-                crate::vfs::servers::server(*server).map(|s| s.display_name()).unwrap_or_else(|| "?".into())
+                crate::vfs::servers::server(*server)
+                    .map(|s| s.display_name())
+                    .unwrap_or_else(|| "?".into())
             } else {
                 name
             }
@@ -278,7 +313,10 @@ pub fn volume_label(v: &crate::platform::Volume) -> String {
     if v.path == crate::platform::home() {
         return crate::i18n::t("internal_storage").to_owned();
     }
-    v.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+    v.path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 /// Names compared as people read them: "file 2" before "file 10", ignoring case.
@@ -324,16 +362,29 @@ fn status_rank(e: &Entry) -> u8 {
     u8::from(e.readonly) * 4 + u8::from(e.hidden) * 2 + u8::from(e.symlink)
 }
 
-pub fn compare(a: &Entry, b: &Entry, sort: SortKey, descending: bool, folders_first: bool) -> Ordering {
+pub fn compare(
+    a: &Entry,
+    b: &Entry,
+    sort: SortKey,
+    descending: bool,
+    folders_first: bool,
+) -> Ordering {
     if folders_first && a.is_dir() != b.is_dir() {
-        return if a.is_dir() { Ordering::Less } else { Ordering::Greater };
+        return if a.is_dir() {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        };
     }
     let by_name = || natural_cmp(&a.name, &b.name);
     let o = match sort {
         SortKey::Name => by_name(),
         SortKey::Modified => a.modified.cmp(&b.modified).then_with(by_name),
         SortKey::Size => a.size.cmp(&b.size).then_with(by_name),
-        SortKey::Kind => Category::of(&a.ext, a.is_dir()).cmp(&Category::of(&b.ext, b.is_dir())).then_with(|| a.ext.cmp(&b.ext)).then_with(by_name),
+        SortKey::Kind => Category::of(&a.ext, a.is_dir())
+            .cmp(&Category::of(&b.ext, b.is_dir()))
+            .then_with(|| a.ext.cmp(&b.ext))
+            .then_with(by_name),
         SortKey::Status => status_rank(a).cmp(&status_rank(b)).then_with(by_name),
     };
     if descending { o.reverse() } else { o }
@@ -346,7 +397,10 @@ pub struct Pane {
 
 impl Pane {
     pub fn new(location: Location) -> Self {
-        Pane { tabs: vec![Tab::new(location)], active: 0 }
+        Pane {
+            tabs: vec![Tab::new(location)],
+            active: 0,
+        }
     }
 
     pub fn tab(&self) -> &Tab {

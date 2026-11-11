@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="no_app">Ninguna app puede abrir este archivo</string>
+    <string name="open_with">Abrir con</string>
+    <string name="share_with">Compartir</string>
+    <string name="send_email">Enviar por correo</string>
+</resources>

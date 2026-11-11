@@ -27,11 +27,15 @@ struct Client {
 impl russh::client::Handler for Client {
     type Error = russh::Error;
 
-    async fn check_server_key(&mut self, key: &russh::keys::PublicKey) -> Result<bool, Self::Error> {
+    async fn check_server_key(
+        &mut self,
+        key: &russh::keys::PublicKey,
+    ) -> Result<bool, Self::Error> {
         let fingerprint = key.fingerprint(russh::keys::HashAlg::Sha256).to_string();
         let ok = known_hosts_check(&self.host, &fingerprint);
         if !ok {
-            self.mismatch.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.mismatch
+                .store(true, std::sync::atomic::Ordering::SeqCst);
         }
         Ok(ok)
     }
@@ -63,7 +67,11 @@ pub fn forget_host(host: &str, port: u16) {
     let key = format!("{host}:{port}");
     let file = known_hosts_file();
     let text = std::fs::read_to_string(&file).unwrap_or_default();
-    let kept: String = text.lines().filter(|l| !l.starts_with(&format!("{key} "))).map(|l| format!("{l}\n")).collect();
+    let kept: String = text
+        .lines()
+        .filter(|l| !l.starts_with(&format!("{key} ")))
+        .map(|l| format!("{l}\n"))
+        .collect();
     let _ = std::fs::write(&file, kept);
 }
 
@@ -76,7 +84,10 @@ impl SftpFs {
         let rt = super::runtime()?;
         let host = format!("{}:{}", server.host, server.port);
         let mismatch = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let client = Client { host: host.clone(), mismatch: mismatch.clone() };
+        let client = Client {
+            host: host.clone(),
+            mismatch: mismatch.clone(),
+        };
         let config = Arc::new(russh::client::Config {
             inactivity_timeout: Some(std::time::Duration::from_secs(600)),
             keepalive_interval: Some(std::time::Duration::from_secs(30)),
@@ -84,25 +95,43 @@ impl SftpFs {
         });
         let server = server.clone();
         rt.block_on(async move {
-            let connecting = russh::client::connect(config, (server.host.as_str(), server.port), client);
-            let mut handle = match tokio::time::timeout(std::time::Duration::from_secs(20), connecting).await {
-                Err(_) => return Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
-                Ok(Err(e)) => {
-                    if mismatch.load(std::sync::atomic::Ordering::SeqCst) {
-                        return Err(vfs::other(format!("HOST KEY CHANGED for {host}: refusing to connect")));
+            let connecting =
+                russh::client::connect(config, (server.host.as_str(), server.port), client);
+            let mut handle =
+                match tokio::time::timeout(std::time::Duration::from_secs(20), connecting).await {
+                    Err(_) => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "connection timed out",
+                        ));
                     }
-                    return Err(err(e));
-                }
-                Ok(Ok(h)) => h,
-            };
-            let auth = handle.authenticate_password(server.user.clone(), server.password.clone()).await.map_err(err)?;
+                    Ok(Err(e)) => {
+                        if mismatch.load(std::sync::atomic::Ordering::SeqCst) {
+                            return Err(vfs::other(format!(
+                                "HOST KEY CHANGED for {host}: refusing to connect"
+                            )));
+                        }
+                        return Err(err(e));
+                    }
+                    Ok(Ok(h)) => h,
+                };
+            let auth = handle
+                .authenticate_password(server.user.clone(), server.password.clone())
+                .await
+                .map_err(err)?;
             if !auth.success() {
-                return Err(io::Error::new(io::ErrorKind::PermissionDenied, "authentication failed"));
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "authentication failed",
+                ));
             }
             let channel = handle.channel_open_session().await.map_err(err)?;
             channel.request_subsystem(true, "sftp").await.map_err(err)?;
             let sftp = SftpSession::new(channel.into_stream()).await.map_err(err)?;
-            Ok(SftpFs { sftp, _handle: handle })
+            Ok(SftpFs {
+                sftp,
+                _handle: handle,
+            })
         })
     }
 
@@ -145,7 +174,11 @@ impl Fs for SftpFs {
                 if e.symlink {
                     // Follow the link for its kind (a link to a folder opens as one).
                     if let Ok(target) = self.sftp.metadata(super::join(path, &name)).await {
-                        e.kind = if target.is_dir() { Kind::Dir } else { Kind::File };
+                        e.kind = if target.is_dir() {
+                            Kind::Dir
+                        } else {
+                            Kind::File
+                        };
                         e.size = target.size.unwrap_or(0);
                     }
                 }
@@ -158,12 +191,22 @@ impl Fs for SftpFs {
     fn stat(&self, path: &str) -> io::Result<RawEntry> {
         self.block(async {
             let m = self.sftp.metadata(path).await.map_err(err)?;
-            let name = path.trim_end_matches('/').rsplit('/').next().unwrap_or("/").to_owned();
+            let name = path
+                .trim_end_matches('/')
+                .rsplit('/')
+                .next()
+                .unwrap_or("/")
+                .to_owned();
             Ok(raw(name, &m))
         })
     }
 
-    fn read_into(&self, path: &str, out: &mut dyn Write, progress: Progress<'_>) -> io::Result<u64> {
+    fn read_into(
+        &self,
+        path: &str,
+        out: &mut dyn Write,
+        progress: Progress<'_>,
+    ) -> io::Result<u64> {
         self.block(async {
             let mut file = self.sftp.open(path).await.map_err(err)?;
             let mut buf = vec![0u8; 256 * 1024];
@@ -184,7 +227,13 @@ impl Fs for SftpFs {
         })
     }
 
-    fn write_from(&self, path: &str, input: &mut dyn Read, _size: u64, progress: Progress<'_>) -> io::Result<u64> {
+    fn write_from(
+        &self,
+        path: &str,
+        input: &mut dyn Read,
+        _size: u64,
+        progress: Progress<'_>,
+    ) -> io::Result<u64> {
         self.block(async {
             let mut file = self.sftp.create(path).await.map_err(err)?;
             let mut buf = vec![0u8; 256 * 1024];
@@ -224,7 +273,12 @@ impl Fs for SftpFs {
     }
 
     fn space(&self, path: &str) -> Option<(u64, u64)> {
-        let info = self.block(async { self.sftp.fs_info(path).await.map_err(err) }).ok()??;
-        Some((info.blocks_avail.saturating_mul(info.fragment_size), info.blocks.saturating_mul(info.fragment_size)))
+        let info = self
+            .block(async { self.sftp.fs_info(path).await.map_err(err) })
+            .ok()??;
+        Some((
+            info.blocks_avail.saturating_mul(info.fragment_size),
+            info.blocks.saturating_mul(info.fragment_size),
+        ))
     }
 }

@@ -5,9 +5,9 @@ use std::io::{self, Read, Write};
 use std::time::Duration;
 
 use smb::{
-    Client, ClientConfig, ConnectionConfig, CreateOptions, DirAccessMask, Directory, FileAccessMask, FileAttributes,
-    FileCreateArgs, FileDispositionInformation, FileFullDirectoryInformation, FileRenameInformation, ReadAt, Resource,
-    UncPath, WriteAt,
+    Client, ClientConfig, ConnectionConfig, CreateOptions, DirAccessMask, Directory,
+    FileAccessMask, FileAttributes, FileCreateArgs, FileDispositionInformation,
+    FileFullDirectoryInformation, FileRenameInformation, ReadAt, Resource, UncPath, WriteAt,
 };
 
 use crate::vfs::servers::Server;
@@ -24,8 +24,10 @@ fn err(e: smb::Error) -> io::Error {
 
 impl SmbFs {
     pub fn connect(server: &Server) -> io::Result<Self> {
-        let mut connection = ConnectionConfig::default();
-        connection.timeout = Some(Duration::from_secs(20));
+        let mut connection = ConnectionConfig {
+            timeout: Some(Duration::from_secs(20)),
+            ..Default::default()
+        };
         connection.auth_methods.ntlm = true;
         connection.auth_methods.kerberos = false;
         if server.port != 445 {
@@ -34,20 +36,33 @@ impl SmbFs {
         if server.user.is_empty() {
             connection.allow_unsigned_guest_access = true;
         }
-        let client = Client::new(ClientConfig { connection, ..Default::default() });
+        let client = Client::new(ClientConfig {
+            connection,
+            ..Default::default()
+        });
         let share_name = server.share.trim_matches(|c| c == '/' || c == '\\');
         if share_name.is_empty() {
             return Err(vfs::other("SMB: no share given"));
         }
-        let share = UncPath::new(&server.host).and_then(|u| u.with_share(share_name)).map_err(err)?;
-        let (user, password) = if server.user.is_empty() { ("Guest".to_owned(), String::new()) } else { (server.user.clone(), server.password.clone()) };
+        let share = UncPath::new(&server.host)
+            .and_then(|u| u.with_share(share_name))
+            .map_err(err)?;
+        let (user, password) = if server.user.is_empty() {
+            ("Guest".to_owned(), String::new())
+        } else {
+            (server.user.clone(), server.password.clone())
+        };
         client.share_connect(&share, &user, password).map_err(err)?;
         Ok(SmbFs { client, share })
     }
 
     fn unc(&self, path: &str) -> UncPath {
         let inner = path.trim_matches('/').replace('/', "\\");
-        if inner.is_empty() { self.share.clone() } else { self.share.clone().with_path(&inner) }
+        if inner.is_empty() {
+            self.share.clone()
+        } else {
+            self.share.clone().with_path(&inner)
+        }
     }
 
     fn open(&self, path: &str, args: &FileCreateArgs) -> io::Result<Resource> {
@@ -56,14 +71,22 @@ impl SmbFs {
 
     /// Mark for deletion and close (files and empty folders alike).
     fn delete(&self, path: &str, dir: bool) -> io::Result<()> {
-        let mut args = FileCreateArgs::make_open_existing(FileAccessMask::new().with_delete(true).with_generic_read(true));
+        let mut args = FileCreateArgs::make_open_existing(
+            FileAccessMask::new()
+                .with_delete(true)
+                .with_generic_read(true),
+        );
         if dir {
             args.options = CreateOptions::new().with_directory_file(true);
         }
         let res = self.open(path, &args)?;
         let result = match &res {
-            Resource::File(f) => f.set_info(FileDispositionInformation { delete_pending: true.into() }),
-            Resource::Directory(d) => d.set_info(FileDispositionInformation { delete_pending: true.into() }),
+            Resource::File(f) => f.set_info(FileDispositionInformation {
+                delete_pending: true.into(),
+            }),
+            Resource::Directory(d) => d.set_info(FileDispositionInformation {
+                delete_pending: true.into(),
+            }),
             _ => Ok(()),
         };
         close(res);
@@ -91,7 +114,12 @@ fn filetime(t: time::PrimitiveDateTime) -> Option<i64> {
 
 impl Fs for SmbFs {
     fn list(&self, path: &str) -> io::Result<Vec<RawEntry>> {
-        let args = FileCreateArgs::make_open_existing(DirAccessMask::new().with_list_directory(true).with_synchronize(true).into());
+        let args = FileCreateArgs::make_open_existing(
+            DirAccessMask::new()
+                .with_list_directory(true)
+                .with_synchronize(true)
+                .into(),
+        );
         let dir = self.open(path, &args)?;
         let Resource::Directory(dir) = dir else {
             close(dir);
@@ -132,13 +160,33 @@ impl Fs for SmbFs {
             None => ("/", trimmed),
         };
         if name.is_empty() {
-            return Ok(RawEntry { name: "/".into(), kind: Kind::Dir, size: 0, modified: None, created: None, symlink: false, readonly: false, hidden_attr: false });
+            return Ok(RawEntry {
+                name: "/".into(),
+                kind: Kind::Dir,
+                size: 0,
+                modified: None,
+                created: None,
+                symlink: false,
+                readonly: false,
+                hidden_attr: false,
+            });
         }
-        self.list(parent)?.into_iter().find(|e| e.name == name).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "not found"))
+        self.list(parent)?
+            .into_iter()
+            .find(|e| e.name == name)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "not found"))
     }
 
-    fn read_into(&self, path: &str, out: &mut dyn Write, progress: Progress<'_>) -> io::Result<u64> {
-        let res = self.open(path, &FileCreateArgs::make_open_existing(FileAccessMask::new().with_generic_read(true)))?;
+    fn read_into(
+        &self,
+        path: &str,
+        out: &mut dyn Write,
+        progress: Progress<'_>,
+    ) -> io::Result<u64> {
+        let res = self.open(
+            path,
+            &FileCreateArgs::make_open_existing(FileAccessMask::new().with_generic_read(true)),
+        )?;
         let Resource::File(file) = res else {
             close(res);
             return Err(io::Error::new(io::ErrorKind::IsADirectory, "not a file"));
@@ -158,7 +206,12 @@ impl Fs for SmbFs {
                     }
                 }
                 // End of file is reported as an error status by some servers.
-                Err(e) if e.to_string().to_ascii_lowercase().contains("end of file") || e.to_string().contains("EndOfFile") => break Ok(offset),
+                Err(e)
+                    if e.to_string().to_ascii_lowercase().contains("end of file")
+                        || e.to_string().contains("EndOfFile") =>
+                {
+                    break Ok(offset);
+                }
                 Err(e) => break Err(err(e)),
             }
         };
@@ -166,8 +219,17 @@ impl Fs for SmbFs {
         result
     }
 
-    fn write_from(&self, path: &str, input: &mut dyn Read, _size: u64, progress: Progress<'_>) -> io::Result<u64> {
-        let res = self.open(path, &FileCreateArgs::make_overwrite(FileAttributes::new(), CreateOptions::new()))?;
+    fn write_from(
+        &self,
+        path: &str,
+        input: &mut dyn Read,
+        _size: u64,
+        progress: Progress<'_>,
+    ) -> io::Result<u64> {
+        let res = self.open(
+            path,
+            &FileCreateArgs::make_overwrite(FileAttributes::new(), CreateOptions::new()),
+        )?;
         let Resource::File(file) = res else {
             close(res);
             return Err(io::Error::new(io::ErrorKind::IsADirectory, "not a file"));
@@ -201,7 +263,10 @@ impl Fs for SmbFs {
     fn mkdir(&self, path: &str) -> io::Result<()> {
         let res = self.open(
             path,
-            &FileCreateArgs::make_create_new(FileAttributes::new().with_directory(true), CreateOptions::new().with_directory_file(true)),
+            &FileCreateArgs::make_create_new(
+                FileAttributes::new().with_directory(true),
+                CreateOptions::new().with_directory_file(true),
+            ),
         )?;
         close(res);
         Ok(())
@@ -216,9 +281,20 @@ impl Fs for SmbFs {
     }
 
     fn rename(&self, from: &str, to: &str) -> io::Result<()> {
-        let res = self.open(from, &FileCreateArgs::make_open_existing(FileAccessMask::new().with_delete(true).with_generic_read(true)))?;
+        let res = self.open(
+            from,
+            &FileCreateArgs::make_open_existing(
+                FileAccessMask::new()
+                    .with_delete(true)
+                    .with_generic_read(true),
+            ),
+        )?;
         let target = to.trim_matches('/').replace('/', "\\");
-        let info = FileRenameInformation { replace_if_exists: false.into(), root_directory: 0, file_name: target.as_str().into() };
+        let info = FileRenameInformation {
+            replace_if_exists: false.into(),
+            root_directory: 0,
+            file_name: target.as_str().into(),
+        };
         let result = match &res {
             Resource::File(f) => f.set_info(info),
             Resource::Directory(d) => d.set_info(info),

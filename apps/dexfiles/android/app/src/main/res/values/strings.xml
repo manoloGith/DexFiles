@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DexFiles</string>
+    <string name="no_app">No app can open this file</string>
+    <string name="open_with">Open with</string>
+    <string name="share_with">Share</string>
+    <string name="send_email">Send by email</string>
+</resources>

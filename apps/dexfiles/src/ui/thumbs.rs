@@ -37,44 +37,87 @@ pub struct Thumbs {
 
 impl Thumbs {
     pub fn new(ctx: &egui::Context) -> Self {
-        let queue = Arc::new((Mutex::new(Queue { items: VecDeque::new(), done: Vec::new() }), Condvar::new()));
+        let queue = Arc::new((
+            Mutex::new(Queue {
+                items: VecDeque::new(),
+                done: Vec::new(),
+            }),
+            Condvar::new(),
+        ));
         for n in 0..2 {
             let q = queue.clone();
             let ctx = ctx.clone();
-            let _ = std::thread::Builder::new().name(format!("dexfiles-thumb{n}")).spawn(move || {
-                loop {
-                    let job = {
-                        let (lock, cv) = &*q;
-                        let mut guard = lock.lock().unwrap_or_else(PoisonError::into_inner);
-                        while guard.items.is_empty() {
-                            guard = cv.wait(guard).unwrap_or_else(PoisonError::into_inner);
-                        }
-                        guard.items.pop_back()
-                    };
-                    let Some((key, entry)) = job else { continue };
-                    let image = crate::preview::thumbnail(&entry, SIZE);
-                    q.0.lock().unwrap_or_else(PoisonError::into_inner).done.push((key, image));
-                    ctx.request_repaint();
-                }
-            });
+            let _ = std::thread::Builder::new()
+                .name(format!("dexfiles-thumb{n}"))
+                .spawn(move || {
+                    loop {
+                        let job = {
+                            let (lock, cv) = &*q;
+                            let mut guard = lock.lock().unwrap_or_else(PoisonError::into_inner);
+                            while guard.items.is_empty() {
+                                guard = cv.wait(guard).unwrap_or_else(PoisonError::into_inner);
+                            }
+                            guard.items.pop_back()
+                        };
+                        let Some((key, entry)) = job else { continue };
+                        let image = crate::preview::thumbnail(&entry, SIZE);
+                        q.0.lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .done
+                            .push((key, image));
+                        ctx.request_repaint();
+                    }
+                });
         }
-        Thumbs { slots: HashMap::new(), queue, frame: 0 }
+        Thumbs {
+            slots: HashMap::new(),
+            queue,
+            frame: 0,
+        }
     }
 
     /// Upload what the workers finished; forget the least recently shown beyond the limit.
     pub fn update(&mut self, ctx: &egui::Context) {
         self.frame += 1;
-        let done = std::mem::take(&mut self.queue.0.lock().unwrap_or_else(PoisonError::into_inner).done);
+        let done = std::mem::take(
+            &mut self
+                .queue
+                .0
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .done,
+        );
         for (key, image) in done {
             let slot = match image {
-                Some(img) => Slot::Ready(ctx.load_texture(format!("thumb-{:?}", key.0), img, egui::TextureOptions::LINEAR), self.frame),
+                Some(img) => Slot::Ready(
+                    ctx.load_texture(
+                        format!("thumb-{:?}", key.0),
+                        img,
+                        egui::TextureOptions::LINEAR,
+                    ),
+                    self.frame,
+                ),
                 None => Slot::Failed,
             };
             self.slots.insert(key, slot);
         }
-        let ready = self.slots.values().filter(|s| matches!(s, Slot::Ready(..))).count();
+        let ready = self
+            .slots
+            .values()
+            .filter(|s| matches!(s, Slot::Ready(..)))
+            .count();
         if ready > MAX_TEXTURES {
-            let mut ages: Vec<(u64, Key)> = self.slots.iter().filter_map(|(k, s)| if let Slot::Ready(_, f) = s { Some((*f, k.clone())) } else { None }).collect();
+            let mut ages: Vec<(u64, Key)> = self
+                .slots
+                .iter()
+                .filter_map(|(k, s)| {
+                    if let Slot::Ready(_, f) = s {
+                        Some((*f, k.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             ages.sort_by_key(|(f, _)| *f);
             for (_, k) in ages.into_iter().take(ready - MAX_TEXTURES) {
                 self.slots.remove(&k);

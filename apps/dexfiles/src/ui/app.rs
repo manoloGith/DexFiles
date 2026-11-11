@@ -20,10 +20,24 @@ use crate::vfs::{self, Entry, Location, ServerId};
 
 /// What the worker threads send back.
 pub enum Msg {
-    Listing { tab: u64, generation: u64, result: Result<Vec<Entry>, String>, stamp: Option<std::time::SystemTime> },
-    Tree { location: Location, result: Result<Vec<(String, Location)>, String> },
-    Preview { key: String, content: crate::preview::Content },
-    Space { location: Location, space: Option<(u64, u64)> },
+    Listing {
+        tab: u64,
+        generation: u64,
+        result: Result<Vec<Entry>, String>,
+        stamp: Option<std::time::SystemTime>,
+    },
+    Tree {
+        location: Location,
+        result: Result<Vec<(String, Location)>, String>,
+    },
+    Preview {
+        key: String,
+        content: crate::preview::Content,
+    },
+    Space {
+        location: Location,
+        space: Option<(u64, u64)>,
+    },
     Status(String),
 }
 
@@ -45,14 +59,21 @@ pub enum Action {
     Copy(Vec<Location>),
     Cut(Vec<Location>),
     Paste(Location),
-    Transfer { sources: Vec<Location>, dest: Location, mode: Mode },
+    Transfer {
+        sources: Vec<Location>,
+        dest: Location,
+        mode: Mode,
+    },
     Trash(Vec<Location>),
     AskDelete(Vec<Location>),
     NewFolder(Location),
     NewFile(Location),
     Rename(Entry),
     AskCompress(Vec<Location>),
-    Extract { archive: Location, into_folder: bool },
+    Extract {
+        archive: Location,
+        into_folder: bool,
+    },
     Share(Vec<Location>, bool),
     OpenWith(Location),
     CopyPath(Vec<Location>),
@@ -73,10 +94,17 @@ pub enum Action {
     QuickLook(Entry),
     Settings,
     About,
-    CompressNow { sources: Vec<Location>, dest: Location, format: ArchiveFormat },
+    CompressNow {
+        sources: Vec<Location>,
+        dest: Location,
+        format: ArchiveFormat,
+    },
     DeleteNow(Vec<Location>),
     EmptyTrashNow,
-    RenameNow { from: Location, to: Location },
+    RenameNow {
+        from: Location,
+        to: Location,
+    },
     MkdirNow(Location, bool),
 }
 
@@ -161,7 +189,10 @@ pub struct App {
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, open: Vec<PathBuf>) -> Self {
         let ctx = cc.egui_ctx.clone();
-        let mut settings: Settings = cc.storage.and_then(|s| eframe::get_value(s, Settings::KEY)).unwrap_or_default();
+        let mut settings: Settings = cc
+            .storage
+            .and_then(|s| eframe::get_value(s, Settings::KEY))
+            .unwrap_or_default();
         crate::i18n::set_language(settings.language);
         settings.init_favorites();
         vfs::servers::set_servers(&settings.servers);
@@ -171,19 +202,36 @@ impl App {
         let start = settings.start_location();
         let mut panes = [Pane::new(start.clone()), Pane::new(start)];
         let mut active_pane = 0;
-        if settings.start == crate::settings::StartMode::LastSession && !settings.session.panes.is_empty() {
+        if settings.start == crate::settings::StartMode::LastSession
+            && !settings.session.panes.is_empty()
+        {
             for (i, tabs) in settings.session.panes.iter().enumerate().take(2) {
-                let tabs: Vec<Tab> = tabs.iter().filter(|l| !matches!(l, Location::Local(p) if !p.exists())).cloned().map(Tab::new).collect();
+                let tabs: Vec<Tab> = tabs
+                    .iter()
+                    .filter(|l| !matches!(l, Location::Local(p) if !p.exists()))
+                    .cloned()
+                    .map(Tab::new)
+                    .collect();
                 if !tabs.is_empty() {
                     panes[i].tabs = tabs;
-                    panes[i].active = settings.session.active_tabs.get(i).copied().unwrap_or(0).min(panes[i].tabs.len() - 1);
+                    panes[i].active = settings
+                        .session
+                        .active_tabs
+                        .get(i)
+                        .copied()
+                        .unwrap_or(0)
+                        .min(panes[i].tabs.len() - 1);
                 }
             }
             active_pane = settings.session.active_pane.min(1);
         }
         // Files opened with the app (a folder opens; a file opens its folder, selected).
         for p in open {
-            let loc = if p.is_dir() { Location::Local(p) } else { Location::Local(p.parent().map(PathBuf::from).unwrap_or_default()) };
+            let loc = if p.is_dir() {
+                Location::Local(p)
+            } else {
+                Location::Local(p.parent().map(PathBuf::from).unwrap_or_default())
+            };
             panes[0].open_tab(loc);
         }
         let mut app = App {
@@ -196,7 +244,13 @@ impl App {
             dialog: None,
             tx,
             rx,
-            preview: PreviewState { key: String::new(), content: None, texture: None, requested_at: Instant::now(), loading: false },
+            preview: PreviewState {
+                key: String::new(),
+                content: None,
+                texture: None,
+                requested_at: Instant::now(),
+                loading: false,
+            },
             tree_expanded: HashSet::new(),
             tree: HashMap::new(),
             volumes: crate::platform::volumes(),
@@ -254,7 +308,9 @@ impl App {
 
     /// List a tab's folder on a worker.
     pub fn load(&mut self, pane: usize, tab_index: usize) {
-        let Some(tab) = self.panes[pane].tabs.get_mut(tab_index) else { return };
+        let Some(tab) = self.panes[pane].tabs.get_mut(tab_index) else {
+            return;
+        };
         let location = tab.location().clone();
         if let Location::Remote { server, .. } = &location
             && vfs::servers::needs_password(*server)
@@ -270,12 +326,21 @@ impl App {
         let (id, generation) = (tab.id, tab.generation);
         let tx = self.tx.clone();
         let ctx = self.ctx.clone();
-        let _ = std::thread::Builder::new().name("dexfiles-list".into()).spawn(move || {
-            let stamp = location.as_local().and_then(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
-            let result = vfs::list(&location).map_err(|e| e.to_string());
-            let _ = tx.send(Msg::Listing { tab: id, generation, result, stamp });
-            ctx.request_repaint();
-        });
+        let _ = std::thread::Builder::new()
+            .name("dexfiles-list".into())
+            .spawn(move || {
+                let stamp = location
+                    .as_local()
+                    .and_then(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
+                let result = vfs::list(&location).map_err(|e| e.to_string());
+                let _ = tx.send(Msg::Listing {
+                    tab: id,
+                    generation,
+                    result,
+                    stamp,
+                });
+                ctx.request_repaint();
+            });
         self.request_space(&self.tab(pane).location().clone());
     }
 
@@ -288,18 +353,33 @@ impl App {
         let key = match location {
             Location::Local(p) => {
                 // The volume it is on.
-                let vol = self.volumes.iter().filter(|v| p.starts_with(&v.path)).max_by_key(|v| v.path.as_os_str().len()).map(|v| v.path.clone());
+                let vol = self
+                    .volumes
+                    .iter()
+                    .filter(|v| p.starts_with(&v.path))
+                    .max_by_key(|v| v.path.as_os_str().len())
+                    .map(|v| v.path.clone());
                 Location::Local(vol.unwrap_or_else(|| p.clone()))
             }
-            Location::Remote { server, .. } => Location::Remote { server: *server, path: "/".into() },
+            Location::Remote { server, .. } => Location::Remote {
+                server: *server,
+                path: "/".into(),
+            },
             Location::Trash => return,
         };
         let tx = self.tx.clone();
         let target = location.clone();
-        let _ = std::thread::Builder::new().name("dexfiles-space".into()).spawn(move || {
-            let space = vfs::fs_for(&target).ok().and_then(|fs| fs.space(&target.backend_path()));
-            let _ = tx.send(Msg::Space { location: key, space });
-        });
+        let _ = std::thread::Builder::new()
+            .name("dexfiles-space".into())
+            .spawn(move || {
+                let space = vfs::fs_for(&target)
+                    .ok()
+                    .and_then(|fs| fs.space(&target.backend_path()));
+                let _ = tx.send(Msg::Space {
+                    location: key,
+                    space,
+                });
+            });
     }
 
     pub fn load_tree(&mut self, location: &Location) {
@@ -311,24 +391,37 @@ impl App {
         let ctx = self.ctx.clone();
         let loc = location.clone();
         let show_hidden = self.settings.show_hidden;
-        let _ = std::thread::Builder::new().name("dexfiles-tree".into()).spawn(move || {
-            let result = vfs::list(&loc)
-                .map(|entries| {
-                    let mut dirs: Vec<(String, Location)> =
-                        entries.into_iter().filter(|e| e.is_dir() && (show_hidden || !e.hidden)).map(|e| (e.name, e.location)).collect();
-                    dirs.sort_by(|a, b| super::pane::natural_cmp(&a.0, &b.0));
-                    dirs
-                })
-                .map_err(|e| e.to_string());
-            let _ = tx.send(Msg::Tree { location: loc, result });
-            ctx.request_repaint();
-        });
+        let _ = std::thread::Builder::new()
+            .name("dexfiles-tree".into())
+            .spawn(move || {
+                let result = vfs::list(&loc)
+                    .map(|entries| {
+                        let mut dirs: Vec<(String, Location)> = entries
+                            .into_iter()
+                            .filter(|e| e.is_dir() && (show_hidden || !e.hidden))
+                            .map(|e| (e.name, e.location))
+                            .collect();
+                        dirs.sort_by(|a, b| super::pane::natural_cmp(&a.0, &b.0));
+                        dirs
+                    })
+                    .map_err(|e| e.to_string());
+                let _ = tx.send(Msg::Tree {
+                    location: loc,
+                    result,
+                });
+                ctx.request_repaint();
+            });
     }
 
     fn handle_messages(&mut self) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
-                Msg::Listing { tab, generation, result, stamp } => {
+                Msg::Listing {
+                    tab,
+                    generation,
+                    result,
+                    stamp,
+                } => {
                     for p in 0..2 {
                         for tb in &mut self.panes[p].tabs {
                             if tb.id != tab || tb.generation != generation {
@@ -368,7 +461,11 @@ impl App {
                         self.preview.loading = false;
                         self.preview.texture = None;
                         if let crate::preview::Content::Image { image, .. } = &content {
-                            self.preview.texture = Some(self.ctx.load_texture("preview", image.clone(), egui::TextureOptions::LINEAR));
+                            self.preview.texture = Some(self.ctx.load_texture(
+                                "preview",
+                                image.clone(),
+                                egui::TextureOptions::LINEAR,
+                            ));
                         }
                         self.preview.content = Some(content);
                     }
@@ -399,9 +496,21 @@ impl App {
             false
         });
         if !errors.is_empty() {
-            let text = errors.iter().take(8).cloned().collect::<Vec<_>>().join("\n");
-            let more = if errors.len() > 8 { format!("\n… (+{})", errors.len() - 8) } else { String::new() };
-            self.dialog = Some(Dialog::Message { title: t("errors_title").to_owned(), text: format!("{text}{more}") });
+            let text = errors
+                .iter()
+                .take(8)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n");
+            let more = if errors.len() > 8 {
+                format!("\n… (+{})", errors.len() - 8)
+            } else {
+                String::new()
+            };
+            self.dialog = Some(Dialog::Message {
+                title: t("errors_title").to_owned(),
+                text: format!("{text}{more}"),
+            });
         }
         if touched.is_empty() {
             return;
@@ -412,9 +521,13 @@ impl App {
         for p in 0..2 {
             for i in 0..self.panes[p].tabs.len() {
                 let here = self.panes[p].tabs[i].location().clone();
-                if touched.iter().any(|t| *t == here) {
+                if touched.contains(&here) {
                     let tab = &mut self.panes[p].tabs[i];
-                    let mine: Vec<Location> = created.iter().filter(|c| c.parent().as_ref() == Some(&here)).cloned().collect();
+                    let mine: Vec<Location> = created
+                        .iter()
+                        .filter(|c| c.parent().as_ref() == Some(&here))
+                        .cloned()
+                        .collect();
                     if !mine.is_empty() {
                         tab.pending_select = mine;
                     }
@@ -440,10 +553,15 @@ impl App {
         for p in 0..2 {
             let i = self.panes[p].active;
             let tab = &self.panes[p].tabs[i];
-            if tab.loading || tab.search.is_some() || tab.last_check.elapsed() < Duration::from_secs(2) {
+            if tab.loading
+                || tab.search.is_some()
+                || tab.last_check.elapsed() < Duration::from_secs(2)
+            {
                 continue;
             }
-            let Some(path) = tab.location().as_local().map(PathBuf::from) else { continue };
+            let Some(path) = tab.location().as_local().map(PathBuf::from) else {
+                continue;
+            };
             let stamp = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
             let changed = stamp != tab.dir_stamp;
             self.panes[p].tabs[i].last_check = Instant::now();
@@ -487,16 +605,18 @@ impl App {
             remote => {
                 self.say(tf("downloading", remote.name()));
                 let tx = self.tx.clone();
-                let _ = std::thread::Builder::new().name("dexfiles-open".into()).spawn(move || match vfs::local_copy(&remote, &mut |_| true) {
-                    Ok(p) => {
-                        if let Err(e) = crate::platform::open_file(&p, chooser) {
+                let _ = std::thread::Builder::new()
+                    .name("dexfiles-open".into())
+                    .spawn(move || match vfs::local_copy(&remote, &mut |_| true) {
+                        Ok(p) => {
+                            if let Err(e) = crate::platform::open_file(&p, chooser) {
+                                let _ = tx.send(Msg::Status(tf("cant_open", e)));
+                            }
+                        }
+                        Err(e) => {
                             let _ = tx.send(Msg::Status(tf("cant_open", e)));
                         }
-                    }
-                    Err(e) => {
-                        let _ = tx.send(Msg::Status(tf("cant_open", e)));
-                    }
-                });
+                    });
             }
         }
     }
@@ -521,25 +641,27 @@ impl App {
 
     fn share(&mut self, items: Vec<Location>, email: bool) {
         let tx = self.tx.clone();
-        let _ = std::thread::Builder::new().name("dexfiles-share".into()).spawn(move || {
-            let mut paths = Vec::new();
-            for l in &items {
-                match vfs::local_copy(l, &mut |_| true) {
-                    Ok(p) if p.is_file() => paths.push(p),
-                    Ok(_) => {}
-                    Err(e) => {
-                        let _ = tx.send(Msg::Status(format!("{}: {e}", l.name())));
+        let _ = std::thread::Builder::new()
+            .name("dexfiles-share".into())
+            .spawn(move || {
+                let mut paths = Vec::new();
+                for l in &items {
+                    match vfs::local_copy(l, &mut |_| true) {
+                        Ok(p) if p.is_file() => paths.push(p),
+                        Ok(_) => {}
+                        Err(e) => {
+                            let _ = tx.send(Msg::Status(format!("{}: {e}", l.name())));
+                        }
                     }
                 }
-            }
-            if paths.is_empty() {
-                let _ = tx.send(Msg::Status(t("share_files_only").to_owned()));
-                return;
-            }
-            if let Err(e) = crate::platform::share(&paths, email) {
-                let _ = tx.send(Msg::Status(e));
-            }
-        });
+                if paths.is_empty() {
+                    let _ = tx.send(Msg::Status(t("share_files_only").to_owned()));
+                    return;
+                }
+                if let Err(e) = crate::platform::share(&paths, email) {
+                    let _ = tx.send(Msg::Status(e));
+                }
+            });
     }
 
     fn handle_action(&mut self, action: Action) {
@@ -608,32 +730,57 @@ impl App {
                     if clip.cut {
                         self.clip = None;
                     }
-                    self.start_job(JobKind::Transfer { sources: clip.items, dest, mode });
+                    self.start_job(JobKind::Transfer {
+                        sources: clip.items,
+                        dest,
+                        mode,
+                    });
                 }
             }
-            Action::Transfer { sources, dest, mode } => {
+            Action::Transfer {
+                sources,
+                dest,
+                mode,
+            } => {
                 if !sources.is_empty() {
-                    self.start_job(JobKind::Transfer { sources, dest, mode });
+                    self.start_job(JobKind::Transfer {
+                        sources,
+                        dest,
+                        mode,
+                    });
                 }
             }
             Action::Trash(items) => {
-                let (local, remote): (Vec<Location>, Vec<Location>) = items.into_iter().partition(Location::is_local);
+                let (local, remote): (Vec<Location>, Vec<Location>) =
+                    items.into_iter().partition(Location::is_local);
                 if !local.is_empty() {
-                    let paths: Vec<PathBuf> = local.iter().filter_map(|l| l.as_local().map(PathBuf::from)).collect();
+                    let paths: Vec<PathBuf> = local
+                        .iter()
+                        .filter_map(|l| l.as_local().map(PathBuf::from))
+                        .collect();
                     self.say(tf("trashed_n", paths.len()));
                     self.start_job(JobKind::Trash { items: paths });
                 }
                 if !remote.is_empty() {
                     // Servers have no trash: deleting there is for good, so ask.
-                    self.dialog = Some(Dialog::ConfirmDelete { items: remote, remote: true });
+                    self.dialog = Some(Dialog::ConfirmDelete {
+                        items: remote,
+                        remote: true,
+                    });
                 }
             }
             Action::AskDelete(items) if !items.is_empty() => {
-                if items.iter().all(|l| matches!(l, Location::Local(p) if self.is_in_trash(p))) {
+                if items
+                    .iter()
+                    .all(|l| matches!(l, Location::Local(p) if self.is_in_trash(p)))
+                {
                     let entries: Vec<Entry> = self.tab(self.active_pane).selected_entries();
                     self.handle_action(Action::Purge(entries));
                 } else {
-                    self.dialog = Some(Dialog::ConfirmDelete { items, remote: false });
+                    self.dialog = Some(Dialog::ConfirmDelete {
+                        items,
+                        remote: false,
+                    });
                 }
             }
             Action::AskDelete(_) => {}
@@ -649,7 +796,9 @@ impl App {
                     self.start_job(JobKind::Mkdir { location });
                 }
             }
-            Action::Rename(e) => self.dialog = Some(Dialog::rename(&e, self.settings.show_extensions)),
+            Action::Rename(e) => {
+                self.dialog = Some(Dialog::rename(&e, self.settings.show_extensions))
+            }
             Action::RenameNow { from, to } => self.start_job(JobKind::Rename { from, to }),
             Action::AskCompress(items) if !items.is_empty() => {
                 if items.iter().any(|l| !l.is_local()) {
@@ -659,13 +808,32 @@ impl App {
                 }
             }
             Action::AskCompress(_) => {}
-            Action::CompressNow { sources, dest, format } => self.start_job(JobKind::Compress { sources, dest, format }),
-            Action::Extract { archive, into_folder } => {
-                let Some(parent) = archive.parent() else { return };
-                let parent = if parent.is_local() { parent } else { Location::Local(crate::platform::home().join("Download")) };
+            Action::CompressNow {
+                sources,
+                dest,
+                format,
+            } => self.start_job(JobKind::Compress {
+                sources,
+                dest,
+                format,
+            }),
+            Action::Extract {
+                archive,
+                into_folder,
+            } => {
+                let Some(parent) = archive.parent() else {
+                    return;
+                };
+                let parent = if parent.is_local() {
+                    parent
+                } else {
+                    Location::Local(crate::platform::home().join("Download"))
+                };
                 let dest = if into_folder {
                     let base = crate::archive::folder_name(&archive.name());
-                    let name = ops::unique_name(&base, |n| parent.as_local().is_some_and(|p| p.join(n).exists()));
+                    let name = ops::unique_name(&base, |n| {
+                        parent.as_local().is_some_and(|p| p.join(n).exists())
+                    });
                     parent.join(&name)
                 } else {
                     parent
@@ -675,7 +843,11 @@ impl App {
             Action::Share(items, email) => self.share(items, email),
             Action::OpenWith(l) => self.open_file(l, true),
             Action::CopyPath(items) => {
-                let text = items.iter().map(|l| l.address(&self.settings.servers)).collect::<Vec<_>>().join("\n");
+                let text = items
+                    .iter()
+                    .map(|l| l.address(&self.settings.servers))
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 crate::platform::copy_text(&self.ctx, text);
                 self.say(t("path_copied"));
             }
@@ -746,7 +918,11 @@ impl App {
                 let q = tab.query.clone();
                 if q.is_filtering() || q.content {
                     let root = tab.location().clone();
-                    let query = crate::search::Query { recursive: true, include_hidden: self.settings.show_hidden, ..q };
+                    let query = crate::search::Query {
+                        recursive: true,
+                        include_hidden: self.settings.show_hidden,
+                        ..q
+                    };
                     let search = crate::search::start(&self.ctx, root, query);
                     let tab = self.tab_mut(p);
                     tab.search = Some(search);
@@ -782,7 +958,11 @@ impl App {
     /// Copied files also go to the system clipboard as their paths (to paste in other apps;
     /// and on a desktop egui only reports Ctrl+V when the clipboard holds text).
     fn clip_paths(&self, items: &[Location]) {
-        let text = items.iter().map(|l| l.address(&self.settings.servers)).collect::<Vec<_>>().join("\n");
+        let text = items
+            .iter()
+            .map(|l| l.address(&self.settings.servers))
+            .collect::<Vec<_>>()
+            .join("\n");
         crate::platform::copy_text(&self.ctx, text);
     }
 
@@ -798,7 +978,10 @@ impl App {
         let dark = match self.settings.theme {
             ThemeChoice::Dark => true,
             ThemeChoice::Light => false,
-            ThemeChoice::System => ctx.input(|i| i.raw.system_theme).map(|t| t == egui::Theme::Dark).unwrap_or(false),
+            ThemeChoice::System => ctx
+                .input(|i| i.raw.system_theme)
+                .map(|t| t == egui::Theme::Dark)
+                .unwrap_or(false),
         };
         if self.applied_theme != Some(dark) {
             super::theme::apply(ctx, dark);
@@ -862,9 +1045,15 @@ impl App {
     /// Keyboard shortcuts (when no text field has the keyboard).
     fn keyboard(&mut self, ctx: &egui::Context) {
         let p = self.active_pane;
-        let pressed = |ctx: &egui::Context, m: Modifiers, k: Key| ctx.input_mut(|i| i.consume_key(m, k));
+        let pressed =
+            |ctx: &egui::Context, m: Modifiers, k: Key| ctx.input_mut(|i| i.consume_key(m, k));
         // Mouse back and forward buttons work everywhere.
-        let (extra1, extra2) = ctx.input(|i| (i.pointer.button_pressed(egui::PointerButton::Extra1), i.pointer.button_pressed(egui::PointerButton::Extra2)));
+        let (extra1, extra2) = ctx.input(|i| {
+            (
+                i.pointer.button_pressed(egui::PointerButton::Extra1),
+                i.pointer.button_pressed(egui::PointerButton::Extra2),
+            )
+        });
         if extra1 {
             self.actions.push(Action::Back(p));
         }
@@ -875,7 +1064,9 @@ impl App {
             return;
         }
         if self.quick_look.is_some() {
-            if pressed(ctx, Modifiers::NONE, Key::Space) || pressed(ctx, Modifiers::NONE, Key::Escape) {
+            if pressed(ctx, Modifiers::NONE, Key::Space)
+                || pressed(ctx, Modifiers::NONE, Key::Escape)
+            {
                 self.quick_look = None;
             }
             return;
@@ -905,7 +1096,9 @@ impl App {
         if pressed(ctx, Modifiers::COMMAND, Key::Comma) {
             self.actions.push(Action::Settings);
         }
-        if pressed(ctx, Modifiers::COMMAND, Key::Plus) || pressed(ctx, Modifiers::COMMAND, Key::Equals) {
+        if pressed(ctx, Modifiers::COMMAND, Key::Plus)
+            || pressed(ctx, Modifiers::COMMAND, Key::Equals)
+        {
             self.settings.zoom = (self.settings.zoom + 0.1).min(2.5);
         }
         if pressed(ctx, Modifiers::COMMAND, Key::Minus) {
@@ -933,7 +1126,17 @@ impl App {
             self.settings.show_hidden = !self.settings.show_hidden;
             self.mark_dirty();
         }
-        for (i, key) in [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6].into_iter().enumerate() {
+        for (i, key) in [
+            Key::Num1,
+            Key::Num2,
+            Key::Num3,
+            Key::Num4,
+            Key::Num5,
+            Key::Num6,
+        ]
+        .into_iter()
+        .enumerate()
+        {
             if pressed(ctx, Modifiers::COMMAND, key) {
                 self.actions.push(Action::SetView(ViewMode::ALL[i]));
             }
@@ -945,7 +1148,11 @@ impl App {
         let here = self.tab(p).location().clone();
         let sel = self.selection(p);
         if pressed(ctx, Modifiers::COMMAND | Modifiers::SHIFT, Key::C) {
-            self.actions.push(Action::CopyPath(if sel.is_empty() { vec![here.clone()] } else { sel.clone() }));
+            self.actions.push(Action::CopyPath(if sel.is_empty() {
+                vec![here.clone()]
+            } else {
+                sel.clone()
+            }));
         }
         if pressed(ctx, Modifiers::COMMAND | Modifiers::SHIFT, Key::N) {
             self.actions.push(Action::NewFolder(here.clone()));
@@ -1022,7 +1229,10 @@ impl App {
             }
         }
         if pressed(ctx, Modifiers::NONE, Key::Space) {
-            let e = self.tab(p).cursor.and_then(|c| self.tab(p).item(c).cloned());
+            let e = self
+                .tab(p)
+                .cursor
+                .and_then(|c| self.tab(p).item(c).cloned());
             if let Some(e) = e {
                 self.actions.push(Action::QuickLook(e));
             }
@@ -1076,7 +1286,10 @@ impl App {
             let right = ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowRight));
             let left = ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowLeft));
             if right {
-                let e = self.tab(p).cursor.and_then(|c| self.tab(p).item(c).cloned());
+                let e = self
+                    .tab(p)
+                    .cursor
+                    .and_then(|c| self.tab(p).item(c).cloned());
                 if let Some(e) = e.filter(Entry::is_dir) {
                     self.actions.push(Action::Open(p, e));
                 }
@@ -1088,7 +1301,13 @@ impl App {
         for (delta, shift, absolute) in moves {
             let tab = self.tab_mut(p);
             let cur = tab.cursor.map(|c| c as isize).unwrap_or(-1);
-            let next = if absolute { delta } else if cur < 0 { 0 } else { cur + delta };
+            let next = if absolute {
+                delta
+            } else if cur < 0 {
+                0
+            } else {
+                cur + delta
+            };
             let next = next.clamp(0, n as isize - 1) as usize;
             if shift {
                 if tab.anchor.is_none() {
@@ -1107,9 +1326,21 @@ impl App {
             if i.modifiers.command || i.modifiers.alt {
                 return String::new();
             }
-            i.events.iter().filter_map(|e| if let egui::Event::Text(t) = e { Some(t.clone()) } else { None }).collect()
+            i.events
+                .iter()
+                .filter_map(|e| {
+                    if let egui::Event::Text(t) = e {
+                        Some(t.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
         });
-        let typed: String = typed.chars().filter(|c| !c.is_control() && *c != ' ').collect();
+        let typed: String = typed
+            .chars()
+            .filter(|c| !c.is_control() && *c != ' ')
+            .collect();
         if typed.is_empty() {
             return;
         }
@@ -1119,7 +1350,10 @@ impl App {
         self.type_ahead.0.push_str(&typed.to_lowercase());
         self.type_ahead.1 = Instant::now();
         let prefix = self.type_ahead.0.clone();
-        let found = self.tab(p).items().position(|e| e.name.to_lowercase().starts_with(&prefix));
+        let found = self
+            .tab(p)
+            .items()
+            .position(|e| e.name.to_lowercase().starts_with(&prefix));
         if let Some(i) = found {
             let tab = self.tab_mut(p);
             tab.select_only(i);
@@ -1146,7 +1380,11 @@ impl App {
             None => {
                 let tab = self.tab(self.active_pane);
                 let sel = tab.selected_entries();
-                if sel.len() == 1 { sel.into_iter().next() } else { None }
+                if sel.len() == 1 {
+                    sel.into_iter().next()
+                } else {
+                    None
+                }
             }
         };
         let Some(entry) = entry else {
@@ -1159,7 +1397,9 @@ impl App {
         if key == self.preview.key {
             return;
         }
-        if self.preview.requested_at.elapsed() < Duration::from_millis(120) && !self.preview.key.is_empty() {
+        if self.preview.requested_at.elapsed() < Duration::from_millis(120)
+            && !self.preview.key.is_empty()
+        {
             self.ctx.request_repaint_after(Duration::from_millis(130));
             return;
         }
@@ -1175,49 +1415,88 @@ impl App {
         }
         let tx = self.tx.clone();
         let ctx = self.ctx.clone();
-        let _ = std::thread::Builder::new().name("dexfiles-preview".into()).spawn(move || {
-            let content = crate::preview::load(&entry, 1600);
-            let _ = tx.send(Msg::Preview { key, content });
-            ctx.request_repaint();
-        });
+        let _ = std::thread::Builder::new()
+            .name("dexfiles-preview".into())
+            .spawn(move || {
+                let content = crate::preview::load(&entry, 1600);
+                let _ = tx.send(Msg::Preview { key, content });
+                ctx.request_repaint();
+            });
     }
 
     /// Files dropped onto the window from outside (desktop) or opened with the app (Android):
     /// copied into the folder under the pointer, or the active one.
     fn external_drops(&mut self, ctx: &egui::Context) {
         #[allow(unused_mut)]
-        let mut paths: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
+        let mut paths: Vec<PathBuf> = ctx.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .map(|f| f.path().to_path_buf())
+                .filter(|p| !p.as_os_str().is_empty())
+                .collect()
+        });
         #[cfg(target_os = "android")]
-        paths.extend(craft_android::android::events::opened().into_iter().map(PathBuf::from));
+        paths.extend(
+            craft_android::android::events::opened()
+                .into_iter()
+                .map(PathBuf::from),
+        );
         if paths.is_empty() {
             return;
         }
         let pos = ctx.input(|i| i.pointer.hover_pos());
         let dest = pos
-            .and_then(|pos| self.drop_targets.iter().filter(|t| t.rect.contains(pos) && !t.trash).max_by_key(|t| t.priority).map(|t| t.dest.clone()))
+            .and_then(|pos| {
+                self.drop_targets
+                    .iter()
+                    .filter(|t| t.rect.contains(pos) && !t.trash)
+                    .max_by_key(|t| t.priority)
+                    .map(|t| t.dest.clone())
+            })
             .unwrap_or_else(|| self.tab(self.active_pane).location().clone());
         if dest == Location::Trash {
             return;
         }
         let sources: Vec<Location> = paths.into_iter().map(Location::Local).collect();
-        self.start_job(JobKind::Transfer { sources, dest, mode: Mode::Copy });
+        self.start_job(JobKind::Transfer {
+            sources,
+            dest,
+            mode: Mode::Copy,
+        });
     }
 
     /// A drag of items released over a target.
     fn finish_drag(&mut self, ctx: &egui::Context) {
-        let Some(payload) = egui::DragAndDrop::payload::<DragPayload>(ctx) else { return };
+        let Some(payload) = egui::DragAndDrop::payload::<DragPayload>(ctx) else {
+            return;
+        };
         if !ctx.input(|i| i.pointer.any_released()) {
             return;
         }
         egui::DragAndDrop::clear_payload(ctx);
-        let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) else { return };
-        let Some(target) = self.drop_targets.iter().filter(|t| t.rect.contains(pos)).max_by_key(|t| t.priority) else { return };
+        let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) else {
+            return;
+        };
+        let Some(target) = self
+            .drop_targets
+            .iter()
+            .filter(|t| t.rect.contains(pos))
+            .max_by_key(|t| t.priority)
+        else {
+            return;
+        };
         let dest = target.dest.clone();
         if target.trash {
             self.actions.push(Action::Trash(payload.items.clone()));
             return;
         }
-        let items: Vec<Location> = payload.items.iter().filter(|l| **l != dest && l.parent().as_ref() != Some(&dest)).cloned().collect();
+        let items: Vec<Location> = payload
+            .items
+            .iter()
+            .filter(|l| **l != dest && l.parent().as_ref() != Some(&dest))
+            .cloned()
+            .collect();
         if items.is_empty() || dest == Location::Trash {
             return;
         }
@@ -1229,24 +1508,39 @@ impl App {
             Mode::Move
         } else {
             let same = items.iter().all(|l| match (l, &dest) {
-                (Location::Local(a), Location::Local(b)) => a.parent().and_then(crate::vfs::local::device) == crate::vfs::local::device(b),
+                (Location::Local(a), Location::Local(b)) => {
+                    a.parent().and_then(crate::vfs::local::device) == crate::vfs::local::device(b)
+                }
                 _ => l.same_backend(&dest),
             });
             if same { Mode::Move } else { Mode::Copy }
         };
-        self.actions.push(Action::Transfer { sources: items, dest, mode });
+        self.actions.push(Action::Transfer {
+            sources: items,
+            dest,
+            mode,
+        });
     }
 
     fn save_session(&mut self) {
         self.settings.session = crate::settings::Session {
-            panes: self.panes.iter().map(|p| p.tabs.iter().map(|t| t.location().clone()).collect()).collect(),
+            panes: self
+                .panes
+                .iter()
+                .map(|p| p.tabs.iter().map(|t| t.location().clone()).collect())
+                .collect(),
             active_tabs: self.panes.iter().map(|p| p.active).collect(),
             active_pane: self.active_pane,
         };
     }
 
     pub fn refresh_visible_all(&mut self) {
-        let (sort, desc, ff, hidden) = (self.settings.sort, self.settings.sort_descending, self.settings.folders_first, self.settings.show_hidden);
+        let (sort, desc, ff, hidden) = (
+            self.settings.sort,
+            self.settings.sort_descending,
+            self.settings.folders_first,
+            self.settings.show_hidden,
+        );
         for p in &mut self.panes {
             for t in &mut p.tabs {
                 if t.dirty {
@@ -1263,6 +1557,26 @@ impl App {
     /// Back, or the window's close button: with jobs running, ask first.
     fn closing(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| i.viewport().close_requested()) {
+            // Android's Back (craft-android turns it into a close request) goes back first,
+            // as in any file manager; the window closes from the first folder.
+            if cfg!(target_os = "android") && !self.closing {
+                let p = self.active_pane;
+                if self.dialog.is_some() || self.quick_look.is_some() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                    self.dialog = None;
+                    self.quick_look = None;
+                    return;
+                }
+                if self.tab(p).search.is_some() || self.tab(p).can_back() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                    if self.tab(p).search.is_some() {
+                        self.actions.push(Action::ClearSearch(p));
+                    } else {
+                        self.actions.push(Action::Back(p));
+                    }
+                    return;
+                }
+            }
             let running = self.jobs.iter().any(|j| !j.state.status().finished);
             if running && !self.closing {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);

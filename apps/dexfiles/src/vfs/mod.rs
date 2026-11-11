@@ -46,8 +46,16 @@ impl Location {
     /// The last component (the root's name is empty).
     pub fn name(&self) -> String {
         match self {
-            Location::Local(p) => p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-            Location::Remote { path, .. } => path.trim_end_matches('/').rsplit('/').next().unwrap_or_default().to_owned(),
+            Location::Local(p) => p
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            Location::Remote { path, .. } => path
+                .trim_end_matches('/')
+                .rsplit('/')
+                .next()
+                .unwrap_or_default()
+                .to_owned(),
             Location::Trash => String::new(),
         }
     }
@@ -64,7 +72,10 @@ impl Location {
                     Some(0) | None => "/".to_owned(),
                     Some(i) => trimmed[..i].to_owned(),
                 };
-                Some(Location::Remote { server: *server, path: parent })
+                Some(Location::Remote {
+                    server: *server,
+                    path: parent,
+                })
             }
             Location::Trash => None,
         }
@@ -75,7 +86,10 @@ impl Location {
             Location::Local(p) => Location::Local(p.join(name)),
             Location::Remote { server, path } => {
                 let base = path.trim_end_matches('/');
-                Location::Remote { server: *server, path: format!("{base}/{name}") }
+                Location::Remote {
+                    server: *server,
+                    path: format!("{base}/{name}"),
+                }
             }
             Location::Trash => Location::Trash,
         }
@@ -85,7 +99,16 @@ impl Location {
     pub fn starts_with(&self, other: &Location) -> bool {
         match (self, other) {
             (Location::Local(a), Location::Local(b)) => a.starts_with(b),
-            (Location::Remote { server: s1, path: a }, Location::Remote { server: s2, path: b }) => {
+            (
+                Location::Remote {
+                    server: s1,
+                    path: a,
+                },
+                Location::Remote {
+                    server: s2,
+                    path: b,
+                },
+            ) => {
                 let b = b.trim_end_matches('/');
                 s1 == s2 && (a == b || a.starts_with(&format!("{b}/")) || b.is_empty())
             }
@@ -107,7 +130,13 @@ impl Location {
     pub fn backend_path(&self) -> String {
         match self {
             Location::Local(p) => p.to_string_lossy().into_owned(),
-            Location::Remote { path, .. } => if path.is_empty() { "/".to_owned() } else { path.clone() },
+            Location::Remote { path, .. } => {
+                if path.is_empty() {
+                    "/".to_owned()
+                } else {
+                    path.clone()
+                }
+            }
             Location::Trash => String::new(),
         }
     }
@@ -117,7 +146,11 @@ impl Location {
         match self {
             Location::Local(p) => p.to_string_lossy().into_owned(),
             Location::Remote { server, path } => match servers.iter().find(|s| s.id == *server) {
-                Some(s) => format!("{}{}", s.url_base(), if path.is_empty() { "/" } else { path }),
+                Some(s) => format!(
+                    "{}{}",
+                    s.url_base(),
+                    if path.is_empty() { "/" } else { path }
+                ),
                 None => format!("?{path}"),
             },
             Location::Trash => "trash:///".to_owned(),
@@ -169,7 +202,11 @@ pub struct Entry {
 
 impl Entry {
     pub fn from_raw(parent: &Location, raw: RawEntry) -> Self {
-        let ext = if raw.kind == Kind::Dir { String::new() } else { extension(&raw.name) };
+        let ext = if raw.kind == Kind::Dir {
+            String::new()
+        } else {
+            extension(&raw.name)
+        };
         let hidden = raw.name.starts_with('.') || raw.hidden_attr;
         Entry {
             location: parent.join(&raw.name),
@@ -212,7 +249,11 @@ pub fn extension(name: &str) -> String {
 /// Name without its extension (as [`extension`] splits it).
 pub fn stem(name: &str) -> &str {
     let ext = extension(name);
-    if ext.is_empty() { name } else { &name[..name.len() - ext.len() - 1] }
+    if ext.is_empty() {
+        name
+    } else {
+        &name[..name.len() - ext.len() - 1]
+    }
 }
 
 /// Bytes moved so far; return `false` to cancel.
@@ -223,10 +264,14 @@ pub trait Fs: Send + Sync {
     fn list(&self, path: &str) -> io::Result<Vec<RawEntry>>;
     fn stat(&self, path: &str) -> io::Result<RawEntry>;
     /// Copy the file at `path` into `out`.
-    fn read_into(&self, path: &str, out: &mut dyn Write, progress: Progress<'_>) -> io::Result<u64>;
+    fn read_into(&self, path: &str, out: &mut dyn Write, progress: Progress<'_>)
+    -> io::Result<u64>;
     /// Up to `limit` bytes from the start of the file.
     fn read_head(&self, path: &str, limit: usize) -> io::Result<Vec<u8>> {
-        let mut out = LimitedWriter { buf: Vec::new(), limit };
+        let mut out = LimitedWriter {
+            buf: Vec::new(),
+            limit,
+        };
         match self.read_into(path, &mut out, &mut |_| true) {
             Ok(_) => Ok(out.buf),
             Err(e) if e.kind() == io::ErrorKind::WriteZero => Ok(out.buf),
@@ -234,7 +279,13 @@ pub trait Fs: Send + Sync {
         }
     }
     /// Create or replace the file at `path` with what `input` holds.
-    fn write_from(&self, path: &str, input: &mut dyn Read, size: u64, progress: Progress<'_>) -> io::Result<u64>;
+    fn write_from(
+        &self,
+        path: &str,
+        input: &mut dyn Read,
+        size: u64,
+        progress: Progress<'_>,
+    ) -> io::Result<u64>;
     fn mkdir(&self, path: &str) -> io::Result<()>;
     fn remove_file(&self, path: &str) -> io::Result<()>;
     /// Remove an empty folder.
@@ -268,7 +319,11 @@ impl Write for LimitedWriter {
 }
 
 /// Copy with progress reports and cancellation (between chunks).
-pub fn copy_stream(input: &mut dyn Read, out: &mut dyn Write, progress: Progress<'_>) -> io::Result<u64> {
+pub fn copy_stream(
+    input: &mut dyn Read,
+    out: &mut dyn Write,
+    progress: Progress<'_>,
+) -> io::Result<u64> {
     let mut buf = vec![0u8; 256 * 1024];
     let mut total = 0u64;
     loop {
@@ -316,7 +371,10 @@ pub fn list(location: &Location) -> io::Result<Vec<Entry>> {
     }
     let fs = fs_for(location)?;
     let raw = fs.list(&location.backend_path())?;
-    Ok(raw.into_iter().map(|r| Entry::from_raw(location, r)).collect())
+    Ok(raw
+        .into_iter()
+        .map(|r| Entry::from_raw(location, r))
+        .collect())
 }
 
 pub fn stat(location: &Location) -> io::Result<Entry> {
@@ -335,7 +393,9 @@ pub fn local_copy(location: &Location, progress: Progress<'_>) -> io::Result<Pat
         return Ok(p.clone());
     }
     let fs = fs_for(location)?;
-    let dir = crate::platform::cache_dir().join("remote").join(format!("{:016x}", hash(&location.address(&[]))));
+    let dir = crate::platform::cache_dir()
+        .join("remote")
+        .join(format!("{:016x}", hash(&location.address(&[]))));
     std::fs::create_dir_all(&dir)?;
     let target = dir.join(location.name());
     let partial = dir.join(format!(".{}.part", location.name()));
@@ -359,13 +419,28 @@ mod tests {
 
     #[test]
     fn remote_paths_join_and_climb() {
-        let root = Location::Remote { server: ServerId(1), path: "/".into() };
+        let root = Location::Remote {
+            server: ServerId(1),
+            path: "/".into(),
+        };
         let a = root.join("a");
-        assert_eq!(a, Location::Remote { server: ServerId(1), path: "/a".into() });
+        assert_eq!(
+            a,
+            Location::Remote {
+                server: ServerId(1),
+                path: "/a".into()
+            }
+        );
         let b = a.join("b c");
         assert_eq!(b.name(), "b c");
         assert_eq!(b.parent(), Some(a.clone()));
-        assert_eq!(a.parent(), Some(Location::Remote { server: ServerId(1), path: "/".into() }));
+        assert_eq!(
+            a.parent(),
+            Some(Location::Remote {
+                server: ServerId(1),
+                path: "/".into()
+            })
+        );
         assert!(b.starts_with(&a));
         assert!(b.starts_with(&root));
         assert!(!a.starts_with(&b));

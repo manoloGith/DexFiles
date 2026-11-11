@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- A file manager browses all of shared storage: "All files access" on Android 11+, the
+         classic storage permissions on Android 10 (with the legacy storage model). -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <!-- Network locations: FTP, SFTP, SMB, WebDAV. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- wgpu draws with Vulkan or OpenGL ES 3; glow (the fallback) needs OpenGL ES 3 too. -->
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+    <!-- A mouse and a keyboard are what DeX is for, but the app also starts without them. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.type.pc" android:required="false" />
+
+    <!-- "Open with" and "Share" need to see the apps that handle each kind of file. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="*/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="*/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:hasCode="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.DexFiles"
+        android:requestLegacyExternalStorage="true"
+        android:resizeableActivity="true">
+
+        <!-- Samsung DeX: keep the process when the window moves between the phone and the monitor
+             or the density changes. -->
+        <meta-data android:name="com.samsung.android.keepalive.density" android:value="true" />
+        <meta-data android:name="com.samsung.android.multidisplay.keep_process_alive" android:value="true" />
+
+        <!-- GameActivity subclass: winit receives every resize, density, keyboard and theme
+             change as an event, so none of them may recreate the activity. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="false"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboard|keyboardHidden|navigation|uiMode|fontScale|locale|layoutDirection|colorMode|touchscreen|mcc|mnc|fontWeightAdjustment">
+
+            <meta-data android:name="android.app.lib_name" android:value="dexfiles" />
+
+            <!-- A desktop-sized window when DeX or desktop windowing opens it in a freeform window. -->
+            <layout
+                android:defaultWidth="1280dp"
+                android:defaultHeight="800dp"
+                android:gravity="center"
+                android:minWidth="640dp"
+                android:minHeight="420dp" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.APP_FILES" />
+            </intent-filter>
+
+            <!-- Files shared to DexFiles are saved into the open folder. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
+        <!-- What "Open with" and "Share" hand to other apps. A subclass, so it doesn't merge with
+             craft-activity's own FileProvider. -->
+        <provider
+            android:name=".DexFilesProvider"
+            android:authorities="${applicationId}.dexfiles"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/dexfiles_paths" />
+        </provider>
+
+        <!-- RestartActivity and the clipboard's FileProvider come from craft-activity's manifest. -->
+    </application>
+</manifest>
