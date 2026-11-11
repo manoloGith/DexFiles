@@ -140,6 +140,22 @@ fn crumbs(app: &App, loc: &Location) -> Vec<(String, Location)> {
     let mut out = Vec::new();
     match loc {
         Location::Trash => out.push((t("trash").to_owned(), Location::Trash)),
+        Location::Archive { archive, inner } => {
+            // The archive's folder, the archive, then the folders inside it.
+            if let Some(parent) = archive.parent() {
+                out = crumbs(app, &parent);
+            }
+            let top = Location::Archive {
+                archive: archive.clone(),
+                inner: "/".into(),
+            };
+            out.push((archive.name(), top.clone()));
+            let mut cur = top;
+            for part in inner.split('/').filter(|p| !p.is_empty()) {
+                cur = cur.join(part);
+                out.push((part.to_owned(), cur.clone()));
+            }
+        }
         Location::Local(_) => {
             // Stop at a volume's top or the home folder, named as the sidebar names them.
             let mut cur = Some(loc.clone());

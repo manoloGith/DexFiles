@@ -213,6 +213,7 @@ pub fn folder_key(l: &Location) -> String {
         Location::Local(p) => p.to_string_lossy().into_owned(),
         Location::Remote { server, path } => format!("server:{}:{path}", server.0),
         Location::Trash => "trash:".to_owned(),
+        Location::Archive { archive, inner } => format!("archive:{}:{inner}", folder_key(archive)),
     }
 }
 

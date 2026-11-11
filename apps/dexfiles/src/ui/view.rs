@@ -105,6 +105,8 @@ pub fn window(app: &mut App, ui: &mut Ui) {
     });
     super::dialogs::show(app, ui.ctx());
     quick_look(app, ui.ctx());
+    super::viewer::show(app, ui.ctx());
+    super::player::fullscreen(app, ui.ctx());
     drag_ghost(app, ui.ctx());
 }
 
@@ -175,6 +177,7 @@ pub fn space_for(app: &App, l: Location) -> Option<(u64, u64)> {
             })
             .copied(),
         Location::Trash => None,
+        Location::Archive { archive, .. } => space_for(app, (**archive).clone()),
     }
 }
 

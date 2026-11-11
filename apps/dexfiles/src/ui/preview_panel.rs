@@ -154,9 +154,10 @@ fn info(app: &mut App, ui: &mut Ui, sel: &[Entry]) {
                 if sel.iter().filter(|e| super::player::playable(e)).count() > 1
                     && crate::media::available()
                     && ui.button(t("play_all")).clicked()
-                    && let Some(first) = sel.iter().find(|e| super::player::playable(e)) {
-                        app.actions.push(Action::Play(first.clone()));
-                    }
+                    && let Some(first) = sel.iter().find(|e| super::player::playable(e))
+                {
+                    app.actions.push(Action::Play(first.clone()));
+                }
             });
         }
     }
@@ -178,6 +179,8 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
     }
     let mut pdf_wanted: Option<(std::path::PathBuf, usize, u32)> = None;
     let mut play = false;
+    let mut fullscreen = false;
+    let mut open_viewer = false;
     match &app.preview.content {
         Some(content @ (Content::Image { .. } | Content::Pdf { .. } | Content::Media { .. })) => {
             let reserve = if matches!(content, Content::Pdf { pages, .. } if *pages > 1)
@@ -188,7 +191,16 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
                 0.0
             };
             let pic = Rect::from_min_max(area.min, pos2(area.right(), area.bottom() - reserve));
-            ui.allocate_rect(area, Sense::hover());
+            let pic_resp = ui.allocate_rect(area, Sense::click());
+            // A double click: the image viewer, or the player over the whole window.
+            if pic_resp.double_clicked() {
+                if super::viewer::viewable(e) {
+                    open_viewer = true;
+                } else if super::player::playable(e) && crate::media::available() {
+                    play = true;
+                    fullscreen = true;
+                }
+            }
             match &app.preview.texture {
                 Some(tex) => {
                     let size = tex.size_vec2();
@@ -430,7 +442,14 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
         app.request_pdf(path, page, px);
     }
     if play {
-        app.actions.push(Action::Play(e.clone()));
+        let (list, index) = super::player::queue_for(app, e);
+        super::player::start(app, list, index);
+        if let Some(p) = app.player.as_mut() {
+            p.fullscreen = fullscreen;
+        }
+    }
+    if open_viewer {
+        super::viewer::open(app, e);
     }
 }
 

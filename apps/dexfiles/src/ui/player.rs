@@ -30,6 +30,9 @@ pub struct Player {
     sent_rect: Option<Option<[i32; 4]>>,
     /// The track ended and the next one was started (once per ending).
     advanced: bool,
+    /// Over the whole window, the controls hiding while the pointer rests.
+    pub fullscreen: bool,
+    last_motion: Instant,
 }
 
 impl Player {
@@ -71,6 +74,8 @@ pub fn start(app: &mut App, list: Vec<Entry>, index: usize) {
         video_rect: None,
         sent_rect: None,
         advanced: false,
+        fullscreen: false,
+        last_motion: Instant::now(),
     });
     load(app, index);
 }
@@ -330,112 +335,19 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         pos2(full.left(), picture.bottom() + 6.0),
         pos2(full.right(), picture.bottom() + controls_h),
     );
-    let st = p.state.clone();
-    let galley =
-        painter.layout_no_wrap(title, FontId::proportional(12.5), ui.visuals().text_color());
-    let clip = Rect::from_min_max(c.left_top(), pos2(c.right() - 80.0, c.top() + 16.0));
-    painter
-        .with_clip_rect(clip)
-        .galley(c.left_top(), galley, ui.visuals().text_color());
-    painter.text(
-        pos2(c.right(), c.top()),
-        Align2::RIGHT_TOP,
-        format!("{} / {}", time(st.position_ms), time(st.duration_ms)),
-        FontId::proportional(11.0),
-        pal.weak,
-    );
-    // position bar
-    let bar = Rect::from_min_max(
-        pos2(c.left(), c.top() + 20.0),
-        pos2(c.right(), c.top() + 26.0),
-    );
-    let bar_resp = ui.interact(
-        bar.expand2(vec2(0.0, 6.0)),
-        ui.scope_id().with("player-seek"),
-        Sense::click_and_drag(),
-    );
-    painter.rect_filled(
-        bar.shrink2(vec2(0.0, 1.5)),
-        CornerRadius::same(2),
-        pal.separator,
-    );
-    let frac = if st.duration_ms > 0 {
-        st.position_ms as f32 / st.duration_ms as f32
-    } else {
-        0.0
-    };
-    let filled = Rect::from_min_max(
-        bar.left_top() + vec2(0.0, 1.5),
-        pos2(
-            bar.left() + bar.width() * frac.clamp(0.0, 1.0),
-            bar.bottom() - 1.5,
-        ),
-    );
-    painter.rect_filled(filled, CornerRadius::same(2), theme::ACCENT);
-    if bar_resp.hovered() || bar_resp.dragged() {
-        painter.circle_filled(pos2(filled.right(), bar.center().y), 5.0, theme::ACCENT);
-    }
-    if (bar_resp.clicked() || bar_resp.drag_stopped())
-        && st.duration_ms > 0
-        && let Some(pos) = bar_resp.interact_pointer_pos()
-    {
-        let f = ((pos.x - bar.left()) / bar.width()).clamp(0.0, 1.0);
-        events.push(Event::Seek((f * st.duration_ms as f32) as u64));
-    }
-    // buttons, centred; list and close at the right
-    let by = c.top() + 44.0;
-    let size = 26.0;
-    let n = p.list.len();
-    let has_prev = p.index > 0;
-    let has_next = p.index + 1 < n;
-    let playing = st.playing;
-    let centre = c.center().x;
-    for (i, (s, enabled, ev)) in [
-        (Sym::Previous, has_prev, Event::Previous),
-        (
-            if playing { Sym::Pause } else { Sym::Play },
-            true,
-            Event::PlayPause,
-        ),
-        (Sym::Next, has_next, Event::Next),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let r = Rect::from_center_size(
-            pos2(centre + (i as f32 - 1.0) * (size + 14.0), by),
-            Vec2::splat(size + if i == 1 { 6.0 } else { 0.0 }),
-        );
-        if button(ui, &painter, r, s, enabled, i == 1, ("player-btn", i)) {
-            events.push(ev);
-        }
-    }
-    let close_r = Rect::from_center_size(pos2(c.right() - 12.0, by), Vec2::splat(22.0));
-    if button(
+    let text = ui.visuals().text_color();
+    controls(
+        p,
         ui,
         &painter,
-        close_r,
-        Sym::Close,
-        true,
+        c,
+        title,
+        text,
+        pal.weak,
+        pal.separator,
         false,
-        "player-close",
-    ) {
-        events.push(Event::Close);
-    }
-    if n > 1 {
-        let list_r = Rect::from_center_size(pos2(c.right() - 42.0, by), Vec2::splat(22.0));
-        if button(
-            ui,
-            &painter,
-            list_r,
-            Sym::Playlist,
-            true,
-            p.show_list,
-            "player-list",
-        ) {
-            events.push(Event::ToggleList);
-        }
-    }
+        &mut events,
+    );
 
     // The list.
     if list_h > 0.0 {
@@ -478,6 +390,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             });
     }
 
+    apply(app, events);
+}
+
+fn apply(app: &mut App, events: Vec<Event>) {
     for ev in events {
         match ev {
             Event::PlayPause => {
@@ -527,6 +443,148 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 }
             }
             Event::Close => close(app),
+            Event::Fullscreen => {
+                if let Some(p) = app.player.as_mut() {
+                    p.fullscreen = !p.fullscreen;
+                    p.last_motion = Instant::now();
+                }
+            }
+        }
+    }
+}
+
+/// The controls under the picture: title and times, the position bar, the buttons.
+#[allow(clippy::too_many_arguments)]
+fn controls(
+    p: &Player,
+    ui: &mut Ui,
+    painter: &egui::Painter,
+    c: Rect,
+    title: String,
+    text: Color32,
+    weak: Color32,
+    track: Color32,
+    fullscreen: bool,
+    events: &mut Vec<Event>,
+) {
+    let st = p.state.clone();
+    let galley = painter.layout_no_wrap(title, FontId::proportional(12.5), text);
+    let clip = Rect::from_min_max(c.left_top(), pos2(c.right() - 80.0, c.top() + 16.0));
+    painter
+        .with_clip_rect(clip)
+        .galley(c.left_top(), galley, text);
+    painter.text(
+        pos2(c.right(), c.top()),
+        Align2::RIGHT_TOP,
+        format!("{} / {}", time(st.position_ms), time(st.duration_ms)),
+        FontId::proportional(11.0),
+        weak,
+    );
+    // position bar
+    let bar = Rect::from_min_max(
+        pos2(c.left(), c.top() + 20.0),
+        pos2(c.right(), c.top() + 26.0),
+    );
+    let bar_resp = ui.interact(
+        bar.expand2(vec2(0.0, 6.0)),
+        ui.scope_id().with("player-seek"),
+        Sense::click_and_drag(),
+    );
+    painter.rect_filled(bar.shrink2(vec2(0.0, 1.5)), CornerRadius::same(2), track);
+    let frac = if st.duration_ms > 0 {
+        st.position_ms as f32 / st.duration_ms as f32
+    } else {
+        0.0
+    };
+    let filled = Rect::from_min_max(
+        bar.left_top() + vec2(0.0, 1.5),
+        pos2(
+            bar.left() + bar.width() * frac.clamp(0.0, 1.0),
+            bar.bottom() - 1.5,
+        ),
+    );
+    painter.rect_filled(filled, CornerRadius::same(2), theme::ACCENT);
+    if bar_resp.hovered() || bar_resp.dragged() {
+        painter.circle_filled(pos2(filled.right(), bar.center().y), 5.0, theme::ACCENT);
+    }
+    if (bar_resp.clicked() || bar_resp.drag_stopped())
+        && st.duration_ms > 0
+        && let Some(pos) = bar_resp.interact_pointer_pos()
+    {
+        let f = ((pos.x - bar.left()) / bar.width()).clamp(0.0, 1.0);
+        events.push(Event::Seek((f * st.duration_ms as f32) as u64));
+    }
+    // buttons, centred; list and close at the right
+    let by = c.top() + 44.0;
+    let size = 26.0;
+    let n = p.list.len();
+    let has_prev = p.index > 0;
+    let has_next = p.index + 1 < n;
+    let playing = st.playing;
+    let centre = c.center().x;
+    for (i, (s, enabled, ev)) in [
+        (Sym::Previous, has_prev, Event::Previous),
+        (
+            if playing { Sym::Pause } else { Sym::Play },
+            true,
+            Event::PlayPause,
+        ),
+        (Sym::Next, has_next, Event::Next),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let r = Rect::from_center_size(
+            pos2(centre + (i as f32 - 1.0) * (size + 14.0), by),
+            Vec2::splat(size + if i == 1 { 6.0 } else { 0.0 }),
+        );
+        if button(ui, painter, r, s, enabled, i == 1, ("player-btn", i)) {
+            events.push(ev);
+        }
+    }
+    let close_r = Rect::from_center_size(pos2(c.right() - 12.0, by), Vec2::splat(22.0));
+    if button(
+        ui,
+        painter,
+        close_r,
+        Sym::Close,
+        true,
+        false,
+        "player-close",
+    ) {
+        events.push(Event::Close);
+    }
+    let fs_r = Rect::from_center_size(
+        pos2(c.right() - if n > 1 { 72.0 } else { 42.0 }, by),
+        Vec2::splat(22.0),
+    );
+    if button(
+        ui,
+        painter,
+        fs_r,
+        if fullscreen {
+            Sym::ExitFullscreen
+        } else {
+            Sym::Fullscreen
+        },
+        true,
+        false,
+        "player-fullscreen",
+    ) {
+        events.push(Event::Fullscreen);
+    }
+    if n > 1 {
+        let list_r = Rect::from_center_size(pos2(c.right() - 42.0, by), Vec2::splat(22.0));
+        if button(
+            ui,
+            painter,
+            list_r,
+            Sym::Playlist,
+            true,
+            p.show_list,
+            "player-list",
+        ) {
+            events.push(Event::ToggleList);
         }
     }
 }
@@ -539,6 +597,7 @@ enum Event {
     Jump(usize),
     ToggleList,
     Close,
+    Fullscreen,
 }
 
 fn button(
@@ -579,4 +638,146 @@ fn button(
         color,
     );
     resp.clicked() && enabled
+}
+
+/// Keys in full screen: Esc leaves it, Space plays or pauses, ← → go back or on 10 s,
+/// Page Up / Page Down change file.
+pub fn fullscreen_keys(app: &mut App, ctx: &egui::Context) {
+    use egui::{Key, Modifiers};
+    let pressed = |k: Key| ctx.input_mut(|i| i.consume_key(Modifiers::NONE, k));
+    let mut events = Vec::new();
+    if pressed(Key::Escape) {
+        events.push(Event::Fullscreen);
+    }
+    if pressed(Key::Space) || pressed(Key::K) {
+        events.push(Event::PlayPause);
+    }
+    let pos = app
+        .player
+        .as_ref()
+        .map(|p| p.state.position_ms)
+        .unwrap_or(0);
+    if pressed(Key::ArrowRight) {
+        events.push(Event::Seek(pos + 10_000));
+    }
+    if pressed(Key::ArrowLeft) {
+        events.push(Event::Seek(pos.saturating_sub(10_000)));
+    }
+    if pressed(Key::PageDown) {
+        events.push(Event::Next);
+    }
+    if pressed(Key::PageUp) {
+        events.push(Event::Previous);
+    }
+    if !events.is_empty()
+        && let Some(p) = app.player.as_mut()
+    {
+        p.last_motion = Instant::now();
+    }
+    apply(app, events);
+}
+
+/// The player over the whole window: the picture as big as it fits, the controls along the
+/// bottom while the pointer moves (or while paused). A double click leaves full screen.
+pub fn fullscreen(app: &mut App, ctx: &egui::Context) {
+    let Some(p) = app.player.as_mut() else { return };
+    if !p.fullscreen {
+        return;
+    }
+    let moved = ctx.input(|i| i.pointer.delta() != Vec2::ZERO || i.pointer.any_pressed());
+    if moved {
+        p.last_motion = Instant::now();
+    }
+    let idle = p.last_motion.elapsed();
+    let visible = !p.state.playing || p.loading || idle < Duration::from_millis(2500);
+    if !visible {
+        ctx.set_cursor_icon(egui::CursorIcon::None);
+    } else if p.state.playing {
+        ctx.request_repaint_after(Duration::from_millis(2600).saturating_sub(idle));
+    }
+    let screen = ctx.content_rect();
+    let mut events = Vec::new();
+    egui::Area::new(egui::Id::unique("player-fullscreen"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(screen.min)
+        .show(ctx, |ui| {
+            let Some(p) = app.player.as_mut() else { return };
+            let backdrop = ui.allocate_rect(screen, Sense::click());
+            let painter = ui.painter().clone();
+            painter.rect_filled(screen, 0, Color32::BLACK);
+            // The video is a surface of its own over the window: the bar must not lie on it, so
+            // while the bar shows the picture sits above it.
+            let bar_h = if visible { 76.0 } else { 0.0 };
+            let picture =
+                Rect::from_min_max(screen.min, pos2(screen.right(), screen.bottom() - bar_h));
+            if p.is_video() {
+                let aspect = p
+                    .state
+                    .video
+                    .map(|(w, h)| w as f32 / h.max(1) as f32)
+                    .unwrap_or(16.0 / 9.0);
+                let (w, h) = if picture.width() / picture.height() > aspect {
+                    (picture.height() * aspect, picture.height())
+                } else {
+                    (picture.width(), picture.width() / aspect)
+                };
+                let r = Rect::from_center_size(picture.center(), vec2(w, h));
+                p.video_rect = Some(r);
+                if cfg!(not(target_os = "android")) {
+                    painter.rect_stroke(
+                        r,
+                        0,
+                        Stroke::new(1.0, Color32::from_gray(60)),
+                        egui::StrokeKind::Inside,
+                    );
+                    icons::sym(
+                        &painter,
+                        Rect::from_center_size(
+                            r.center(),
+                            Vec2::splat(r.height().min(r.width()) * 0.2),
+                        ),
+                        Sym::Film,
+                        Color32::from_gray(90),
+                    );
+                }
+            } else if let Some(tex) = &p.cover {
+                let size = tex.size_vec2();
+                let inner = picture.shrink(40.0);
+                let scale = (inner.width() / size.x).min(inner.height() / size.y);
+                egui::Image::from_texture(tex)
+                    .corner_radius(8)
+                    .paint_at(ui, Rect::from_center_size(inner.center(), size * scale));
+            } else {
+                let side = picture.height().min(picture.width()) * 0.3;
+                icons::sym(
+                    &painter,
+                    Rect::from_center_size(picture.center(), Vec2::splat(side)),
+                    Sym::Music,
+                    Color32::from_gray(90),
+                );
+            }
+            if visible {
+                let bar =
+                    Rect::from_min_max(pos2(screen.left(), screen.bottom() - bar_h), screen.max);
+                painter.rect_filled(bar, 0, Color32::from_rgb(0x16, 0x16, 0x18));
+                let c = Rect::from_min_max(bar.min + vec2(24.0, 8.0), bar.max - vec2(24.0, 4.0));
+                let title = p.current().map(|e| e.name.clone()).unwrap_or_default();
+                controls(
+                    p,
+                    ui,
+                    &painter,
+                    c,
+                    title,
+                    Color32::from_gray(235),
+                    Color32::from_gray(150),
+                    Color32::from_gray(70),
+                    true,
+                    &mut events,
+                );
+            }
+            if backdrop.double_clicked() {
+                events.push(Event::Fullscreen);
+            }
+        });
+    apply(app, events);
 }

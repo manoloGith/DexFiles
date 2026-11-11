@@ -681,6 +681,76 @@ pub fn extract(
     Ok(())
 }
 
+/// Copy one file of a local archive (by its name inside) to `out`: opening, previewing or
+/// copying out a file of an archive browsed as a folder.
+pub fn read_entry(path: &Path, name: &str, out: &mut dyn Write) -> io::Result<u64> {
+    let ext = kind_of(path);
+    let not_found = || {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("{name}: not in the archive"),
+        )
+    };
+    match ext.as_str() {
+        "zip" | "jar" | "apk" | "cbz" | "epub" => {
+            let mut zip = zip::ZipArchive::new(BufReader::new(File::open(path)?)).map_err(zerr)?;
+            let index = zip.index_for_name(name).ok_or_else(not_found)?;
+            if zip
+                .by_index_raw(index)
+                .map(|f| f.encrypted())
+                .unwrap_or(false)
+            {
+                return Err(password_error(false));
+            }
+            let mut f = zip.by_index(index).map_err(zerr)?;
+            io::copy(&mut f, out)
+        }
+        "7z" => {
+            let mut reader =
+                sevenz_rust2::ArchiveReader::open(path, sevenz_rust2::Password::empty())
+                    .map_err(|e| serr(e, false))?;
+            let mut copied: Option<io::Result<u64>> = None;
+            reader
+                .for_each_entries(|entry, r| {
+                    if entry.name() == name {
+                        copied = Some(io::copy(r, out));
+                        return Ok(false);
+                    }
+                    io::copy(r, &mut io::sink())?;
+                    Ok(true)
+                })
+                .map_err(|e| serr(e, false))?;
+            copied.unwrap_or_else(|| Err(not_found()))
+        }
+        "tar" | "tar.gz" | "tgz" | "tar.bz2" | "tbz2" | "tar.xz" | "txz" | "tar.zst" | "tzst" => {
+            let mut tar = tar::Archive::new(decoder(path, &ext)?);
+            for e in tar.entries()? {
+                let mut e = e?;
+                if e.path().is_ok_and(|p| p.to_string_lossy() == name) {
+                    return io::copy(&mut e, out);
+                }
+            }
+            Err(not_found())
+        }
+        #[cfg(feature = "rar")]
+        "rar" | "cbr" => {
+            let mut cursor = unrar::Archive::new(path)
+                .open_for_processing()
+                .map_err(rar_err)?;
+            while let Some(header) = cursor.read_header().map_err(rar_err)? {
+                if header.entry().filename.to_string_lossy() == name {
+                    let (bytes, _) = header.read().map_err(rar_err)?;
+                    out.write_all(&bytes)?;
+                    return Ok(bytes.len() as u64);
+                }
+                cursor = header.skip().map_err(rar_err)?;
+            }
+            Err(not_found())
+        }
+        _ => Err(not_found()),
+    }
+}
+
 /// A folder name to extract `archive_name` into ("photos.tar.gz" → "photos").
 pub fn folder_name(archive_name: &str) -> String {
     let stem = vfs::stem(archive_name);

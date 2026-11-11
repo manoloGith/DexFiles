@@ -115,7 +115,7 @@ impl Tab {
         self.pos -= 1;
         self.reset();
         // Coming back up selects the folder we were in.
-        self.pending_select = vec![from];
+        self.pending_select = vec![from.as_listed()];
         true
     }
 
@@ -281,6 +281,7 @@ impl Tab {
 pub fn location_title(l: &Location) -> String {
     match l {
         Location::Trash => crate::i18n::t("trash").to_owned(),
+        Location::Archive { .. } => l.name(),
         Location::Local(p) => {
             if *p == crate::platform::home() {
                 return crate::i18n::t("home").to_owned();

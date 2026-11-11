@@ -13,5 +13,6 @@ pub mod theme;
 pub mod thumbs;
 pub mod toolbar;
 pub mod view;
+pub mod viewer;
 
 pub use app::App;

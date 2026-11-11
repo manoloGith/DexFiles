@@ -20,6 +20,12 @@ use crate::vfs::{self, Entry, Location, ServerId};
 
 /// What the worker threads send back.
 pub enum Msg {
+    /// The image viewer's picture, decoded at `px` pixels.
+    ViewerImage {
+        index: usize,
+        px: u32,
+        result: Result<(egui::ColorImage, u32, u32), String>,
+    },
     /// The player's file is ready (downloaded if remote, opened), or failed.
     PlayerOpened {
         index: usize,
@@ -197,6 +203,7 @@ pub struct App {
     applied_zoom: f32,
     pub quick_look: Option<Entry>,
     pub player: Option<super::player::Player>,
+    pub viewer: Option<super::viewer::Viewer>,
     /// The PDF page re-render asked for (path, page, px), not to ask twice.
     pub pdf_request: Option<(PathBuf, usize, u32)>,
     closing: bool,
@@ -295,6 +302,7 @@ impl App {
             applied_zoom: 0.0,
             quick_look: None,
             player: None,
+            viewer: None,
             pdf_request: None,
             closing: false,
             dir_sizes: crate::dirsize::DirSizes::new(&ctx),
@@ -396,7 +404,13 @@ impl App {
     }
 
     fn request_space(&mut self, location: &Location) {
+        let location = match location {
+            // An archive is on the disk or server of the archive.
+            Location::Archive { archive, .. } => archive.as_ref(),
+            other => other,
+        };
         let key = match location {
+            Location::Archive { .. } => return,
             Location::Local(p) => {
                 // The volume it is on.
                 let vol = self
@@ -532,6 +546,9 @@ impl App {
                     }
                 }
                 Msg::Status(text) => self.say(text),
+                Msg::ViewerImage { index, px, result } => {
+                    super::viewer::loaded(self, index, px, result)
+                }
                 Msg::PlayerOpened { index, result } => super::player::opened(self, index, result),
                 Msg::PlayerCover { index, image } => super::player::cover(self, index, image),
             }
@@ -667,6 +684,33 @@ impl App {
             }
             self.navigate(pane, entry.location);
             return;
+        }
+        // DexFiles' own default app for the kind wins over its built-in viewers.
+        let own_default = self.settings.default_app(&entry.ext).is_some();
+        let cat = crate::fileinfo::Category::of(&entry.ext, false);
+        if !own_default && entry.trash.is_none() {
+            // An archive opens like a folder.
+            if crate::vfs::archive_fs::browsable(&entry.ext) {
+                let at = Location::Archive {
+                    archive: Box::new(entry.location),
+                    inner: "/".into(),
+                };
+                self.navigate(pane, at);
+                return;
+            }
+            if super::viewer::viewable(&entry) {
+                super::viewer::open(self, &entry);
+                return;
+            }
+            if super::player::playable(&entry) && crate::media::available() {
+                let (list, index) = super::player::queue_for(self, &entry);
+                super::player::start(self, list, index);
+                if let Some(p) = self.player.as_mut() {
+                    p.fullscreen = true;
+                }
+                return;
+            }
+            let _ = cat;
         }
         self.open_file(entry.location, false);
     }
@@ -808,7 +852,7 @@ impl App {
                 let here = self.tab(p).location().clone();
                 if let Some(parent) = here.parent() {
                     self.navigate(p, parent);
-                    self.tab_mut(p).pending_select = vec![here];
+                    self.tab_mut(p).pending_select = vec![here.as_listed()];
                 }
             }
             Action::Refresh(p) => {
@@ -1121,7 +1165,7 @@ impl App {
             self.applied_theme = Some(dark);
             self.dark = dark;
         }
-        let zoom = self.settings.zoom.clamp(0.6, 2.5);
+        let zoom = self.settings.zoom.clamp(0.6, 2.4);
         if (zoom - self.applied_zoom).abs() > f32::EPSILON {
             ctx.set_zoom_factor(zoom);
             self.applied_zoom = zoom;
@@ -1213,6 +1257,14 @@ impl App {
         if self.dialog.is_some() {
             return;
         }
+        if self.viewer.is_some() {
+            super::viewer::keys(self, ctx);
+            return;
+        }
+        if self.player.as_ref().is_some_and(|p| p.fullscreen) {
+            super::player::fullscreen_keys(self, ctx);
+            return;
+        }
         if self.quick_look.is_some() {
             if pressed(ctx, Modifiers::NONE, Key::Space)
                 || pressed(ctx, Modifiers::NONE, Key::Escape)
@@ -1249,10 +1301,10 @@ impl App {
         if pressed(ctx, Modifiers::COMMAND, Key::Plus)
             || pressed(ctx, Modifiers::COMMAND, Key::Equals)
         {
-            self.settings.zoom = (self.settings.zoom + 0.1).min(2.5);
+            self.settings.zoom = ((self.settings.zoom + 0.2) * 5.0).round().min(12.0) / 5.0;
         }
         if pressed(ctx, Modifiers::COMMAND, Key::Minus) {
-            self.settings.zoom = (self.settings.zoom - 0.1).max(0.6);
+            self.settings.zoom = ((self.settings.zoom - 0.2) * 5.0).round().max(3.0) / 5.0;
         }
         if pressed(ctx, Modifiers::COMMAND, Key::Num0) {
             self.settings.zoom = 1.0;
@@ -1407,7 +1459,7 @@ impl App {
                 (Key::PageDown, page as isize),
                 (Key::PageUp, -(page as isize)),
             ] {
-                for m in [Modifiers::NONE, Modifiers::SHIFT] {
+                for m in [Modifiers::SHIFT, Modifiers::NONE] {
                     if i.consume_key(m, key) {
                         moves.push((delta, m.shift, false));
                     }
@@ -1415,14 +1467,14 @@ impl App {
             }
             if grid {
                 for (key, delta) in [(Key::ArrowRight, 1isize), (Key::ArrowLeft, -1)] {
-                    for m in [Modifiers::NONE, Modifiers::SHIFT] {
+                    for m in [Modifiers::SHIFT, Modifiers::NONE] {
                         if i.consume_key(m, key) {
                             moves.push((delta, m.shift, false));
                         }
                     }
                 }
             }
-            for m in [Modifiers::NONE, Modifiers::SHIFT] {
+            for m in [Modifiers::SHIFT, Modifiers::NONE] {
                 if i.consume_key(m, Key::Home) {
                     moves.push((0, m.shift, true));
                 }
@@ -1728,10 +1780,19 @@ impl App {
             // as in any file manager; the window closes from the first folder.
             if cfg!(target_os = "android") && !self.closing {
                 let p = self.active_pane;
-                if self.dialog.is_some() || self.quick_look.is_some() {
+                let fullscreen = self.player.as_ref().is_some_and(|p| p.fullscreen);
+                if self.dialog.is_some()
+                    || self.quick_look.is_some()
+                    || self.viewer.is_some()
+                    || fullscreen
+                {
                     ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                     self.dialog = None;
                     self.quick_look = None;
+                    self.viewer = None;
+                    if let Some(p) = self.player.as_mut() {
+                        p.fullscreen = false;
+                    }
                     return;
                 }
                 if self.tab(p).search.is_some() || self.tab(p).can_back() {

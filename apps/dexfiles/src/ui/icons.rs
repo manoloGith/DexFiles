@@ -320,6 +320,8 @@ pub enum Sym {
     Previous,
     Next,
     Playlist,
+    Fullscreen,
+    ExitFullscreen,
 }
 
 pub fn sym(painter: &Painter, rect: Rect, s: Sym, color: Color32) {
@@ -450,6 +452,17 @@ pub fn sym(painter: &Painter, rect: Rect, s: Sym, color: Color32) {
                 1,
                 color,
             );
+        }
+        Sym::Fullscreen | Sym::ExitFullscreen => {
+            // four corners, pointing out (or in)
+            let (a, b) = if s == Sym::Fullscreen {
+                (0.85, 0.35)
+            } else {
+                (0.35, 0.85)
+            };
+            for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                line(&[p(sx * a, sy * b), p(sx * a, sy * a), p(sx * b, sy * a)]);
+            }
         }
         Sym::Playlist => {
             for y in [-0.6, -0.15, 0.3] {

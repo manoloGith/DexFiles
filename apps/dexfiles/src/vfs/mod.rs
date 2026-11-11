@@ -2,6 +2,7 @@
 //! behind one blocking interface ([`Fs`]). Every call may be slow (a network round trip, a
 //! sleeping SD card), so the interface only calls them from worker threads.
 
+pub mod archive_fs;
 pub mod local;
 #[cfg(feature = "network")]
 pub mod net;
@@ -25,6 +26,42 @@ pub enum Location {
     Remote { server: ServerId, path: String },
     /// The trash (every local volume's).
     Trash,
+    /// Inside an archive (ZIP, 7z, TAR…, RAR): `inner` is `/`-separated and absolute (`/` is
+    /// the archive's top). Read only.
+    Archive {
+        archive: Box<Location>,
+        inner: String,
+    },
+}
+
+/// The last part of a `/`-separated path.
+fn path_name(path: &str) -> String {
+    path.trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// The parent of a `/`-separated absolute path (`None` for the root).
+fn path_parent(path: &str) -> Option<String> {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(match trimmed.rfind('/') {
+        Some(0) | None => "/".to_owned(),
+        Some(i) => trimmed[..i].to_owned(),
+    })
+}
+
+fn path_join(path: &str, name: &str) -> String {
+    format!("{}/{name}", path.trim_end_matches('/'))
+}
+
+fn path_starts_with(a: &str, b: &str) -> bool {
+    let b = b.trim_end_matches('/');
+    a == b || a.starts_with(&format!("{b}/")) || b.is_empty()
 }
 
 impl Location {
@@ -50,48 +87,61 @@ impl Location {
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default(),
-            Location::Remote { path, .. } => path
-                .trim_end_matches('/')
-                .rsplit('/')
-                .next()
-                .unwrap_or_default()
-                .to_owned(),
+            Location::Remote { path, .. } => path_name(path),
             Location::Trash => String::new(),
+            Location::Archive { archive, inner } => {
+                let n = path_name(inner);
+                if n.is_empty() { archive.name() } else { n }
+            }
         }
+    }
+
+    /// How it shows in its parent's listing: an archive's top is the archive file itself.
+    pub fn as_listed(&self) -> Location {
+        match self {
+            Location::Archive { archive, inner } if inner.trim_end_matches('/').is_empty() => {
+                (**archive).clone()
+            }
+            other => other.clone(),
+        }
+    }
+
+    /// Inside an archive.
+    pub fn in_archive(&self) -> bool {
+        matches!(self, Location::Archive { .. })
     }
 
     pub fn parent(&self) -> Option<Location> {
         match self {
             Location::Local(p) => p.parent().map(|p| Location::Local(p.to_path_buf())),
-            Location::Remote { server, path } => {
-                let trimmed = path.trim_end_matches('/');
-                if trimmed.is_empty() {
-                    return None;
-                }
-                let parent = match trimmed.rfind('/') {
-                    Some(0) | None => "/".to_owned(),
-                    Some(i) => trimmed[..i].to_owned(),
-                };
-                Some(Location::Remote {
-                    server: *server,
-                    path: parent,
-                })
-            }
+            Location::Remote { server, path } => path_parent(path).map(|path| Location::Remote {
+                server: *server,
+                path,
+            }),
             Location::Trash => None,
+            // The archive's top goes up to the folder the archive is in.
+            Location::Archive { archive, inner } => match path_parent(inner) {
+                Some(inner) => Some(Location::Archive {
+                    archive: archive.clone(),
+                    inner,
+                }),
+                None => archive.parent(),
+            },
         }
     }
 
     pub fn join(&self, name: &str) -> Location {
         match self {
             Location::Local(p) => Location::Local(p.join(name)),
-            Location::Remote { server, path } => {
-                let base = path.trim_end_matches('/');
-                Location::Remote {
-                    server: *server,
-                    path: format!("{base}/{name}"),
-                }
-            }
+            Location::Remote { server, path } => Location::Remote {
+                server: *server,
+                path: path_join(path, name),
+            },
             Location::Trash => Location::Trash,
+            Location::Archive { archive, inner } => Location::Archive {
+                archive: archive.clone(),
+                inner: path_join(inner, name),
+            },
         }
     }
 
@@ -108,11 +158,19 @@ impl Location {
                     server: s2,
                     path: b,
                 },
-            ) => {
-                let b = b.trim_end_matches('/');
-                s1 == s2 && (a == b || a.starts_with(&format!("{b}/")) || b.is_empty())
-            }
+            ) => s1 == s2 && path_starts_with(a, b),
             (Location::Trash, Location::Trash) => true,
+            (
+                Location::Archive {
+                    archive: x,
+                    inner: a,
+                },
+                Location::Archive {
+                    archive: y,
+                    inner: b,
+                },
+            ) => x == y && path_starts_with(a, b),
+            (Location::Archive { archive, .. }, other) => archive.starts_with(other),
             _ => false,
         }
     }
@@ -138,6 +196,13 @@ impl Location {
                 }
             }
             Location::Trash => String::new(),
+            Location::Archive { inner, .. } => {
+                if inner.is_empty() {
+                    "/".to_owned()
+                } else {
+                    inner.clone()
+                }
+            }
         }
     }
 
@@ -154,6 +219,11 @@ impl Location {
                 None => format!("?{path}"),
             },
             Location::Trash => "trash:///".to_owned(),
+            Location::Archive { archive, inner } => format!(
+                "{}{}",
+                archive.address(servers),
+                if inner == "/" { "" } else { inner }
+            ),
         }
     }
 }
@@ -361,6 +431,7 @@ pub fn fs_for(location: &Location) -> io::Result<Arc<dyn Fs>> {
         Location::Local(_) => Ok(local::shared()),
         Location::Remote { server, .. } => servers::connection(*server),
         Location::Trash => Ok(local::shared()),
+        Location::Archive { archive, .. } => archive_fs::open(archive),
     }
 }
 

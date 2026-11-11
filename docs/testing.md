@@ -28,7 +28,14 @@ informe.
     abajo y el vídeo sigue visible ahí); la lista con varias pistas; pasar a la siguiente al
     acabar; abrir un menú o un diálogo encima del vídeo (debe ocultarse mientras); cerrar.
 12. Vista previa: un PDF de texto pequeño (nítido) y pasar páginas; un ZIP con carpetas (árbol).
-13. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
+13. Mayús+↑/↓ amplía la selección; Ajustes ▸ Tamaño de la interfaz va de 20 en 20 % (se aplica
+    al soltar).
+14. Doble clic en un ZIP/7z/RAR: se abre como carpeta (solo lectura); abrir, previsualizar y
+    copiar/arrastrar archivos desde dentro; ↑ vuelve a la carpeta del archivo.
+15. Doble clic en una foto (lista o vista previa): visor a pantalla completa, ← → Esc y rueda.
+16. Doble clic en un audio o vídeo: reproductor a pantalla completa; los controles se ocultan
+    al dejar quieto el ratón y vuelven al moverlo; Esc o doble clic salen; Espacio pausa.
+17. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
 
 ## Tests automáticos
 

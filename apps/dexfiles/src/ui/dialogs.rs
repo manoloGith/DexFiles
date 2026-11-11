@@ -1111,11 +1111,28 @@ fn settings_dialog(app: &mut App, ctx: &egui::Context) -> bool {
                 });
                 ui.horizontal(|ui| {
                     ui.label(t("zoom"));
-                    ui.add(
-                        egui::Slider::new(&mut s.zoom, 0.6..=2.5)
-                            .step_by(0.05)
+                    // Steps of 20 %. The value is applied when the slider is let go: applying
+                    // it while dragging moves the slider under the pointer, and it runs away.
+                    let id = egui::Id::unique("zoom-edit");
+                    let mut v: f32 = ui.data(|d| d.get_temp(id)).unwrap_or(s.zoom);
+                    let r = ui.add(
+                        egui::Slider::new(&mut v, 0.6..=2.4)
+                            .step_by(0.2)
                             .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
                     );
+                    if r.dragged() {
+                        ui.data_mut(|d| d.insert_temp(id, v));
+                    } else {
+                        if (v - s.zoom).abs() > 0.001 {
+                            s.zoom = (v * 5.0).round() / 5.0;
+                        }
+                        ui.data_mut(|d| d.remove::<f32>(id));
+                    }
+                    for (label, delta) in [("−", -0.2f32), ("+", 0.2)] {
+                        if ui.small_button(label).clicked() {
+                            s.zoom = ((s.zoom + delta) * 5.0).round().clamp(3.0, 12.0) / 5.0;
+                        }
+                    }
                 });
                 ui.separator();
                 ui.label(RichText::new(t("network")).strong());
