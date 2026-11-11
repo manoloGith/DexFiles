@@ -103,9 +103,10 @@ pub fn volumes() -> Vec<Volume> {
         if let Ok(mounts) = std::fs::read_to_string("/proc/mounts") {
             for line in mounts.lines() {
                 let mut parts = line.split_whitespace();
-                let (Some(_dev), Some(mount)) = (parts.next(), parts.next()) else { continue };
+                let (Some(dev), Some(mount)) = (parts.next(), parts.next()) else { continue };
                 let mount = mount.replace("\\040", " ");
-                if ["/media/", "/run/media/", "/mnt/"].iter().any(|p| mount.starts_with(p)) {
+                // Real disks only (not bind mounts or virtual file systems).
+                if dev.starts_with("/dev/") && ["/media/", "/run/media/", "/mnt/"].iter().any(|p| mount.starts_with(p)) {
                     let path = PathBuf::from(&mount);
                     let label = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                     out.push(Volume { path, label, removable: true });

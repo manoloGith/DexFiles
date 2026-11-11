@@ -58,6 +58,7 @@ fn known_hosts_check(host: &str, fingerprint: &str) -> bool {
 }
 
 /// Forget a server's recorded key (after the user accepts a new one).
+#[allow(dead_code)] // for a "trust the new key" button (phase 2)
 pub fn forget_host(host: &str, port: u16) {
     let key = format!("{host}:{port}");
     let file = known_hosts_file();

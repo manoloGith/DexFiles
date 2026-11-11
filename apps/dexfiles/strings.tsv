@@ -1,1 +1,245 @@
+# key	English	Spanish (tab-separated; build.rs sorts them)
+about	About DexFiles	Acerca de DexFiles
+about_text	A modern file manager for Samsung DeX and Android desktop windowing, made with Rust and egui on craft-android, like DexPdfCraft.	Un explorador de archivos moderno para Samsung DeX y las ventanas de escritorio de Android, hecho en Rust con egui sobre craft-android, como DexPdfCraft.
+accept_invalid_certs	Accept certificates the system doesn't trust (self-signed)	Aceptar certificados en los que el sistema no confía (autofirmados)
+add_favorite	Add to favourites	Añadir a favoritos
+address_hint	Path or address (sftp://, smb://, ftp://, dav://)	Ruta o dirección (sftp://, smb://, ftp://, dav://)
+anonymous_hint	empty: anonymous / guest	vacío: anónimo / invitado
+any_date	Any date	Cualquier fecha
+any_kind	Any kind	Cualquier tipo
+any_size	Any size	Cualquier tamaño
+appearance	Appearance	Apariencia
+apply_to_all	Do the same for the rest	Hacer lo mismo con el resto
+archive_items	{} items in the archive	{} elementos en el archivo comprimido
+archive_name	Archive	Archivo
+ascending	Ascending	Ascendente
 back	Back	Atrás
+back_tip	Back (Alt+←)	Atrás (Alt+←)
+base_path	Base path	Ruta base
+by_content	Name or content	Nombre o contenido
+by_name	Name	Nombre
+calc_size	Calculate size	Calcular tamaño
+camera	Camera	Cámara
+cancel	Cancel	Cancelar
+cant_open	Can't open it: {}	No se puede abrir: {}
+cant_open_folder	This folder can't be opened	No se puede abrir esta carpeta
+cat_app	App	Aplicación
+cat_archive	Archive	Archivo comprimido
+cat_audio	Audio	Audio
+cat_code	Code	Código
+cat_document	Document	Documento
+cat_folder	Folder	Carpeta
+cat_image	Image	Imagen
+cat_other	File	Archivo
+cat_pdf	PDF document	Documento PDF
+cat_presentation	Presentation	Presentación
+cat_spreadsheet	Spreadsheet	Hoja de cálculo
+cat_text	Text	Texto
+cat_video	Video	Vídeo
+close	Close	Cerrar
+close_anyway	Close anyway	Cerrar de todos modos
+close_jobs_text	Some operations haven't finished. Closing now cancels them.	Hay operaciones sin terminar. Si cierras ahora, se cancelarán.
+close_q	Close DexFiles?	¿Cerrar DexFiles?
+close_search	Close search	Cerrar búsqueda
+col_folder	Folder	Carpeta
+col_kind	Kind	Tipo
+col_modified	Modified	Modificado
+col_name	Name	Nombre
+col_size	Size	Tamaño
+col_status	Status	Estado
+compress	Compress	Comprimir
+compress_as	Compress as	Comprimir como
+compress_formats_hint	ZIP opens everywhere; 7z and TAR.XZ make smaller archives.	ZIP se abre en todas partes; 7z y TAR.XZ ocupan menos.
+compress_local_only	Only files on this device can be compressed (for now).	Solo se pueden comprimir archivos del dispositivo (por ahora).
+compress_options	Options…	Opciones…
+conflict_file	There is already a file named “{}” here.	Ya hay un archivo llamado «{}» aquí.
+conflict_folder	There is already a folder named “{}” here.	Ya hay una carpeta llamada «{}» aquí.
+connect	Connect	Conectar
+connect_server	Connect to server…	Conectar a servidor…
+copied_n	{} copied	{} copiado(s)
+copy	Copy	Copiar
+copy_address	Copy the address	Copiar la dirección
+copy_path	Copy path	Copiar ruta
+copy_to_other	Copy to the other pane	Copiar al otro panel
+create	Create	Crear
+created	Created	Creado
+cut	Cut	Cortar
+cut_n	{} cut	{} cortado(s)
+date_month	Last 30 days	Últimos 30 días
+date_older	Older than a year	Hace más de un año
+date_today	Today	Hoy
+date_week	Last 7 days	Últimos 7 días
+date_year	Last year	Último año
+default_view	Default view	Vista predeterminada
+delete	Delete	Eliminar
+delete_forever	Delete permanently	Eliminar permanentemente
+delete_forever_q	Delete permanently?	¿Eliminar permanentemente?
+delete_forever_text	{} will be deleted. This can't be undone.	Se eliminará {}. No se puede deshacer.
+deleted_on	Deleted	Eliminado
+descending	Descending	Descendente
+desktop	Desktop	Escritorio
+devices	Devices	Dispositivos
+disconnect	Disconnect	Desconectar
+disconnected	Disconnected	Desconectado
+documents	Documents	Documentos
+downloading	Downloading {}…	Descargando {}…
+downloads	Downloads	Descargas
+dual_pane	Two panes (F3)	Dos paneles (F3)
+duplicate	Duplicate	Duplicar
+edit	Edit	Editar
+edit_server	Edit server	Editar servidor
+empty_folder	This folder is empty	Esta carpeta está vacía
+empty_trash	Empty trash	Vaciar papelera
+empty_trash_q	Empty the trash?	¿Vaciar la papelera?
+empty_trash_text	The {} items in the trash will be deleted permanently.	Los {} elementos de la papelera se eliminarán permanentemente.
+errors_title	Some items couldn't be processed	Algunos elementos no se pudieron procesar
+ext_change_warning	The extension was .{}: if you change it, the file may not open.	La extensión era .{}: si la cambias, puede que el archivo no se abra.
+extract_here	Extract here	Extraer aquí
+extract_to	Extract to “{}”	Extraer en «{}»
+favorites	Favourites	Favoritos
+folders_first	Folders first	Carpetas primero
+forward_tip	Forward (Alt+→)	Adelante (Alt+→)
+free_of	free of {}	libres de {}
+grant_access	Allow access	Permitir el acceso
+hidden	Hidden	Oculto
+home	Home	Inicio
+host	Server	Servidor
+information	Information	Información
+internal_storage	Internal storage	Almacenamiento interno
+job_compress	Compressing {}	Comprimiendo {}
+job_copy	Copying {} item(s)	Copiando {} elemento(s)
+job_delete	Deleting {} item(s)	Eliminando {} elemento(s)
+job_extract	Extracting {}	Extrayendo {}
+job_move	Moving {} item(s)	Moviendo {} elemento(s)
+job_restore	Restoring {} item(s)	Restaurando {} elemento(s)
+job_trash	Moving {} item(s) to the trash	Moviendo {} elemento(s) a la papelera
+jobs_running	{} operation(s)	{} operación(es)
+keep_both	Keep both	Conservar ambos
+lang_auto	System	Sistema
+language	Language	Idioma
+merge	Merge	Combinar
+more	More	Más
+move_down	Move down	Bajar
+move_to_other	Move to the other pane	Mover al otro panel
+move_to_trash	Move to trash	Mover a la papelera
+move_up	Move up	Subir
+movies	Videos	Vídeos
+music	Music	Música
+n_folders	{} folders	{} carpetas
+n_found	{} found	{} encontrados
+n_items	{} items	{} elementos
+n_items_drag	{} items	{} elementos
+n_scanned	{} checked	{} revisados
+n_selected	{} selected	{} seleccionados
+name_empty	The name can't be empty.	El nombre no puede estar vacío.
+name_invalid	The name can't be “.” or “..” or contain “/”.	El nombre no puede ser «.» ni «..» ni contener «/».
+name_taken	Name already in use	El nombre ya existe
+needs_password	The server needs a password.	El servidor necesita una contraseña.
+network	Network	Red
+new_folder	New folder	Nueva carpeta
+new_folder_name	New folder	Carpeta nueva
+new_tab	New tab (Ctrl+T)	Nueva pestaña (Ctrl+T)
+new_text_file	New text file	Nuevo archivo de texto
+new_text_file_name	New file.txt	Archivo nuevo.txt
+no	No	No
+no_results	Nothing found	No se ha encontrado nada
+no_servers	No servers yet.	Todavía no hay servidores.
+not_found	Not found: {}	No se encuentra: {}
+of_n	of {}	de {}
+on_start	When DexFiles opens, show	Al abrir DexFiles, mostrar
+open	Open	Abrir
+open_new_tab	Open in new tab	Abrir en pestaña nueva
+open_other_pane	Open in the other pane	Abrir en el otro panel
+open_with	Open with…	Abrir con…
+operations	Operations	Operaciones
+optional	optional	opcional
+original_location	Was in	Estaba en
+password	Password	Contraseña
+password_for	Password for {}	Contraseña para {}
+password_stored_note	The password is kept in the app's private settings on this device.	La contraseña se guarda en los ajustes privados de la app en este dispositivo.
+paste	Paste	Pegar
+paste_into	Paste into folder	Pegar en la carpeta
+path_copied	Path copied	Ruta copiada
+permissions	Permissions	Permisos
+pictures	Pictures	Imágenes
+preview_empty	The document has no text.	El documento no tiene texto.
+preview_panel	Preview panel	Panel de vista previa
+preview_pdf_later	PDF previews come in the next phase.	La vista previa de PDF llegará en la siguiente fase.
+preview_too_big	Too big to preview.	Demasiado grande para la vista previa.
+preview_truncated	(only the beginning is shown)	(solo se muestra el principio)
+preview_unsupported	No preview for this kind of file.	No hay vista previa para este tipo de archivo.
+properties	Properties	Propiedades
+protocol	Protocol	Protocolo
+readonly	Read-only	Solo lectura
+refresh	Refresh (F5)	Actualizar (F5)
+remember_password	Remember the password	Recordar la contraseña
+remote_no_trash	Servers have no trash: deleting there is permanent.	Los servidores no tienen papelera: lo que se borra allí se pierde.
+remote_thumbnails	Thumbnails of images on servers (downloads them)	Miniaturas de imágenes en servidores (las descarga)
+remove_favorite	Remove from favourites	Quitar de favoritos
+remove_server	Remove	Eliminar
+rename	Rename	Renombrar
+replace	Replace	Reemplazar
+reset	Reset	Restablecer
+restore	Put back	Restaurar
+results_in	Results in “{}”	Resultados en «{}»
+retry	Try again	Reintentar
+root	Root (/)	Raíz (/)
+save_connect	Save and connect	Guardar y conectar
+search	Search	Buscar
+search_below	Search in subfolders	Buscar en subcarpetas
+search_hint	Typing filters this folder; Enter (or this button) searches everything below it. * and ? are wildcards.	Al escribir se filtra esta carpeta; Intro (o este botón) busca en todo lo que hay debajo. * y ? son comodines.
+search_in	Search in {}	Buscar en {}
+search_options	Search filters	Filtros de búsqueda
+searching	Searching…	Buscando…
+select_all	Select all	Seleccionar todo
+send_email	Send by email	Enviar por correo
+server_name	Name	Nombre
+settings	Settings	Ajustes
+share	Share…	Compartir…
+share_files_only	Only files can be shared (not folders).	Solo se pueden compartir archivos (no carpetas).
+sheets	Sheets: {}	Hojas: {}
+show	Show	Mostrar
+show_extensions	Show file extensions	Mostrar extensiones de archivo
+show_hidden	Show hidden files (Ctrl+H)	Mostrar archivos ocultos (Ctrl+H)
+show_in_folder	Show in its folder	Mostrar en su carpeta
+show_thumbnails	Image thumbnails	Miniaturas de imágenes
+size_empty	Empty (0 B)	Vacío (0 B)
+size_huge	Huge (over 1 GB)	Enorme (más de 1 GB)
+size_large	Large (100 MB – 1 GB)	Grande (100 MB – 1 GB)
+size_medium	Medium (1 – 100 MB)	Mediano (1 – 100 MB)
+size_small	Small (under 1 MB)	Pequeño (menos de 1 MB)
+skip	Skip	Omitir
+slide	Slide	Diapositiva
+sort_by	Sort by	Ordenar por
+start_downloads	Downloads	Descargas
+start_folder	Start folder	Carpeta inicial
+start_folder_opt	This folder:	Esta carpeta:
+start_home	Home folder	Carpeta de inicio
+start_last	The tabs of last time	Las pestañas de la última vez
+stop	Stop	Detener
+storage_needed	DexFiles needs access to all files to browse your storage.	DexFiles necesita acceso a todos los archivos para explorar el almacenamiento.
+symlink	Link	Enlace
+theme	Theme	Tema
+theme_dark	Dark	Oscuro
+theme_light	Light	Claro
+theme_system	System	Sistema
+today	Today	Hoy
+toggle_sidebar	Sidebar	Panel lateral
+trash	Trash	Papelera
+trashed_n	{} moved to the trash	{} a la papelera
+up_tip	Enclosing folder (Alt+↑)	Carpeta superior (Alt+↑)
+use_current	Use the current one	Usar la actual
+user	User	Usuario
+version	Version	Versión
+view	View	Vista
+view_content	Content	Contenido
+view_details	Details	Detalles
+view_icons	Icons	Iconos
+view_large	Large icons	Iconos grandes
+view_list	List	Lista
+view_medium	Medium icons	Iconos medianos
+view_small	Small icons	Iconos pequeños
+where	Where	Ubicación
+yes	Yes	Sí
+yesterday	Yesterday	Ayer
+zoom	Interface size	Tamaño de la interfaz
