@@ -8,6 +8,7 @@ pub mod icons;
 pub mod pane;
 pub mod player;
 pub mod preview_panel;
+pub mod quicklook;
 pub mod sidebar;
 pub mod theme;
 pub mod thumbs;

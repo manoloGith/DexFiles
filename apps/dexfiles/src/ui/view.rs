@@ -104,7 +104,7 @@ pub fn window(app: &mut App, ui: &mut Ui) {
         }
     });
     super::dialogs::show(app, ui.ctx());
-    quick_look(app, ui.ctx());
+    super::quicklook::show(app, ui.ctx());
     super::viewer::show(app, ui.ctx());
     super::player::fullscreen(app, ui.ctx());
     drag_ghost(app, ui.ctx());
@@ -1660,25 +1660,3 @@ fn drag_ghost(app: &App, ctx: &egui::Context) {
     let _ = app;
 }
 
-/// Space: a big preview over the window (like a desktop's quick look).
-fn quick_look(app: &mut App, ctx: &egui::Context) {
-    let Some(entry) = app.quick_look.clone() else {
-        return;
-    };
-    let screen = ctx.content_rect();
-    let mut open = true;
-    egui::Window::new(entry.name.clone())
-        .id(egui::Id::unique("quick-look"))
-        .open(&mut open)
-        .collapsible(false)
-        .default_size(screen.size() * 0.7)
-        .default_pos(screen.center() - screen.size() * 0.35)
-        .show(ctx, |ui| {
-            egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| {
-                super::preview_panel::content(app, ui, &entry, true)
-            });
-        });
-    if !open {
-        app.quick_look = None;
-    }
-}

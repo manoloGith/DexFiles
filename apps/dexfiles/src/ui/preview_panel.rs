@@ -52,6 +52,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             info(app, ui, &sel);
         });
     egui::CentralPanel::no_frame().show(ui, |ui| match (&single, sel.len()) {
+        // Quick look shows the preview over the window (and asks for it at its own size).
+        _ if app.quick_look.is_some() => {}
         (Some(_), _) if playing_this => super::player::show(app, ui),
         (Some(e), _) => content(app, ui, e, false),
         (None, 0) => {
@@ -445,11 +447,14 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
         let (list, index) = super::player::queue_for(app, e);
         super::player::start(app, list, index);
         if let Some(p) = app.player.as_mut() {
-            p.fullscreen = fullscreen;
+            p.fullscreen = fullscreen || large;
         }
     }
     if open_viewer {
         super::viewer::open(app, e);
+    }
+    if large && (play || open_viewer) {
+        app.quick_look = None;
     }
 }
 

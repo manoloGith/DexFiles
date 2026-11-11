@@ -201,7 +201,10 @@ pub fn tick(app: &mut App) {
 
 /// After the frame: tell the activity where the video is (or to hide it).
 pub fn end_frame(app: &mut App, ctx: &egui::Context) {
-    let covered = app.dialog.is_some() || app.quick_look.is_some() || egui::Popup::is_any_open(ctx);
+    let covered = app.dialog.is_some()
+        || app.quick_look.is_some()
+        || app.viewer.is_some()
+        || egui::Popup::is_any_open(ctx);
     let Some(p) = app.player.as_mut() else { return };
     let ppp = ctx.pixels_per_point();
     let rect = if covered || !p.is_video() {
@@ -352,42 +355,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     // The list.
     if list_h > 0.0 {
         let lr = Rect::from_min_max(pos2(full.left(), c.bottom() + 4.0), full.max);
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(lr));
-        egui::ScrollArea::vertical()
-            .id_salt("player-list-scroll")
-            .auto_shrink(false)
-            .show(&mut child, |ui| {
-                ui.spacing_mut().item_spacing.y = 0.0;
-                for (i, e) in p.list.iter().enumerate() {
-                    let (r, resp) =
-                        ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::click());
-                    if i == p.index {
-                        ui.painter()
-                            .rect_filled(r, CornerRadius::same(4), pal.selection_inactive);
-                    } else if resp.hovered() {
-                        ui.painter()
-                            .rect_filled(r, CornerRadius::same(4), pal.hover);
-                    }
-                    let color = if i == p.index {
-                        theme::ACCENT
-                    } else {
-                        ui.visuals().text_color()
-                    };
-                    let g = ui.painter().layout_no_wrap(
-                        e.name.clone(),
-                        FontId::proportional(12.0),
-                        color,
-                    );
-                    ui.painter().with_clip_rect(r).galley(
-                        pos2(r.left() + 6.0, r.center().y - g.size().y / 2.0),
-                        g,
-                        color,
-                    );
-                    if resp.clicked() {
-                        events.push(Event::Jump(i));
-                    }
-                }
-            });
+        let colors = ListColors {
+            current: pal.selection_inactive,
+            hover: pal.hover,
+            text: ui.visuals().text_color(),
+        };
+        list(p, ui, lr, colors, &mut events);
     }
 
     apply(app, events);
@@ -455,6 +428,49 @@ fn apply(app: &mut App, events: Vec<Event>) {
 
 /// The controls under the picture: title and times, the position bar, the buttons.
 #[allow(clippy::too_many_arguments)]
+struct ListColors {
+    current: Color32,
+    hover: Color32,
+    text: Color32,
+}
+
+/// The queue, in `lr`: a click plays that file.
+fn list(p: &Player, ui: &mut Ui, lr: Rect, colors: ListColors, events: &mut Vec<Event>) {
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(lr));
+    egui::ScrollArea::vertical()
+        .id_salt("player-list-scroll")
+        .auto_shrink(false)
+        .show(&mut child, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            for (i, e) in p.list.iter().enumerate() {
+                let (r, resp) =
+                    ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::click());
+                if i == p.index {
+                    ui.painter()
+                        .rect_filled(r, CornerRadius::same(4), colors.current);
+                } else if resp.hovered() {
+                    ui.painter().rect_filled(r, CornerRadius::same(4), colors.hover);
+                }
+                let color = if i == p.index {
+                    theme::ACCENT
+                } else {
+                    colors.text
+                };
+                let g = ui
+                    .painter()
+                    .layout_no_wrap(e.name.clone(), FontId::proportional(12.0), color);
+                ui.painter().with_clip_rect(r.shrink2(vec2(6.0, 0.0))).galley(
+                    pos2(r.left() + 8.0, r.center().y - g.size().y / 2.0),
+                    g,
+                    color,
+                );
+                if resp.clicked() {
+                    events.push(Event::Jump(i));
+                }
+            }
+        });
+}
+
 fn controls(
     p: &Player,
     ui: &mut Ui,
@@ -701,6 +717,9 @@ pub fn fullscreen(app: &mut App, ctx: &egui::Context) {
         .order(egui::Order::Foreground)
         .fixed_pos(screen.min)
         .show(ctx, |ui| {
+            // Over the whole window (the area would otherwise clip short of its edge), in dark.
+            ui.set_clip_rect(screen);
+            *ui.visuals_mut() = egui::Visuals::dark();
             let Some(p) = app.player.as_mut() else { return };
             let backdrop = ui.allocate_rect(screen, Sense::click());
             let painter = ui.painter().clone();
@@ -708,8 +727,29 @@ pub fn fullscreen(app: &mut App, ctx: &egui::Context) {
             // The video is a surface of its own over the window: the bar must not lie on it, so
             // while the bar shows the picture sits above it.
             let bar_h = if visible { 76.0 } else { 0.0 };
-            let picture =
-                Rect::from_min_max(screen.min, pos2(screen.right(), screen.bottom() - bar_h));
+            // The queue, at the right while it is open (beside the video, not over it).
+            let list_w = if p.show_list && p.list.len() > 1 {
+                (screen.width() * 0.3).clamp(200.0, 340.0)
+            } else {
+                0.0
+            };
+            let picture = Rect::from_min_max(
+                screen.min,
+                pos2(screen.right() - list_w, screen.bottom() - bar_h),
+            );
+            if list_w > 0.0 {
+                let lr = Rect::from_min_max(
+                    pos2(screen.right() - list_w, screen.top()),
+                    pos2(screen.right(), screen.bottom() - bar_h),
+                );
+                painter.rect_filled(lr, 0, Color32::from_rgb(0x16, 0x16, 0x18));
+                let colors = ListColors {
+                    current: Color32::from_white_alpha(22),
+                    hover: Color32::from_white_alpha(12),
+                    text: Color32::from_gray(220),
+                };
+                list(p, ui, lr.shrink(8.0), colors, &mut events);
+            }
             if p.is_video() {
                 let aspect = p
                     .state

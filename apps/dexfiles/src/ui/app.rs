@@ -1124,9 +1124,7 @@ impl App {
                     self.settings.show_preview = true;
                 }
             }
-            Action::QuickLook(e) => {
-                self.quick_look = Some(e);
-            }
+            Action::QuickLook(e) => super::quicklook::open(self, e),
             Action::Settings => self.dialog = Some(Dialog::Settings),
             Action::About => self.dialog = Some(Dialog::About),
         }
@@ -1266,11 +1264,7 @@ impl App {
             return;
         }
         if self.quick_look.is_some() {
-            if pressed(ctx, Modifiers::NONE, Key::Space)
-                || pressed(ctx, Modifiers::NONE, Key::Escape)
-            {
-                self.quick_look = None;
-            }
+            super::quicklook::keys(self, ctx);
             return;
         }
         // Even while typing in a field.

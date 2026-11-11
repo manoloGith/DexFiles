@@ -171,6 +171,9 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
         .order(egui::Order::Foreground)
         .fixed_pos(screen.min)
         .show(ctx, |ui| {
+            // Over the whole window (the area would otherwise clip short of its edge), in dark.
+            ui.set_clip_rect(screen);
+            *ui.visuals_mut() = egui::Visuals::dark();
             let Some(v) = app.viewer.as_ref() else { return };
             // The backdrop takes every click under it.
             let backdrop = ui.allocate_rect(screen, Sense::click());
@@ -216,26 +219,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             }
             // Buttons: previous and next at the sides, close at the top right.
             let button = |r: Rect, s: Sym, enabled: bool, id: &str| -> bool {
-                let resp = ui.interact(
-                    r,
-                    ui.scope_id().with(id),
-                    if enabled {
-                        Sense::click()
-                    } else {
-                        Sense::hover()
-                    },
-                );
-                if !enabled {
-                    return false;
-                }
-                let bg = if resp.hovered() {
-                    Color32::from_white_alpha(46)
-                } else {
-                    Color32::from_white_alpha(18)
-                };
-                painter.circle_filled(r.center(), r.width() / 2.0, bg);
-                icons::sym(&painter, r.shrink(r.width() * 0.28), s, Color32::WHITE);
-                resp.clicked()
+                round_button(ui, &painter, r, s, enabled, id)
             };
             let i = v.index as isize;
             let n = v.list.len();
@@ -282,4 +266,70 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     if close {
         app.viewer = None;
     }
+}
+
+/// A round, translucent button of the full-window viewers.
+pub fn round_button(
+    ui: &egui::Ui,
+    painter: &egui::Painter,
+    r: Rect,
+    s: Sym,
+    enabled: bool,
+    id: &str,
+) -> bool {
+    let resp = ui.interact(
+        r,
+        ui.scope_id().with(id),
+        if enabled {
+            Sense::click()
+        } else {
+            Sense::hover()
+        },
+    );
+    if !enabled {
+        return false;
+    }
+    let bg = if resp.hovered() {
+        Color32::from_white_alpha(46)
+    } else {
+        Color32::from_white_alpha(18)
+    };
+    painter.circle_filled(r.center(), r.width() / 2.0, bg);
+    icons::sym(painter, r.shrink(r.width() * 0.28), s, Color32::WHITE);
+    resp.clicked()
+}
+
+/// The standard previous / next / close buttons over `screen`; what was clicked.
+pub fn nav_buttons(
+    ui: &egui::Ui,
+    painter: &egui::Painter,
+    screen: Rect,
+    has_prev: bool,
+    has_next: bool,
+) -> (bool, bool, bool) {
+    let prev = round_button(
+        ui,
+        painter,
+        Rect::from_center_size(pos2(screen.left() + 34.0, screen.center().y), Vec2::splat(44.0)),
+        Sym::Back,
+        has_prev,
+        "overlay-prev",
+    );
+    let next = round_button(
+        ui,
+        painter,
+        Rect::from_center_size(pos2(screen.right() - 34.0, screen.center().y), Vec2::splat(44.0)),
+        Sym::Forward,
+        has_next,
+        "overlay-next",
+    );
+    let close = round_button(
+        ui,
+        painter,
+        Rect::from_center_size(pos2(screen.right() - 30.0, screen.top() + 30.0), Vec2::splat(36.0)),
+        Sym::Close,
+        true,
+        "overlay-close",
+    );
+    (prev, next, close)
 }
