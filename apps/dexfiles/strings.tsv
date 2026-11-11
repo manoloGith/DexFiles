@@ -320,3 +320,6 @@ rename_duplicate	Two items would get this name	Dos elementos tendrían este nomb
 rename_taken	The folder already has an item with this name	Ya hay un elemento con este nombre en la carpeta
 rename_problems	{} names can't be used	{} nombres no se pueden usar
 rename_changes	{} names change	Cambian {} nombres
+dex_apps_added	Default apps from now on: {}	Apps predeterminadas a partir de ahora: {}
+dex_apps_again	Use the Dex apps again	Volver a usar las apps Dex
+dex_apps_again_hint	Sets each Dex app again for the extensions it opens, where no other app is chosen	Vuelve a asignar cada app Dex a las extensiones que abre, donde no haya otra elegida

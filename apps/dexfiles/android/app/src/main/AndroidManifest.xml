@@ -32,6 +32,10 @@
             <action android:name="android.intent.action.SENDTO" />
             <data android:scheme="mailto" />
         </intent>
+        <!-- Dex apps that say which extensions they open (docs/apps-dex.md). -->
+        <intent>
+            <action android:name="io.github.dexfiles.action.OPEN" />
+        </intent>
     </queries>
 
     <application

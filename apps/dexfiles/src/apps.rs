@@ -14,6 +14,57 @@ pub struct AppInfo {
     pub icon: Option<egui::ColorImage>,
 }
 
+/// An app of the Dex family (DexPdfCraft…) and the extensions it says it opens. They become
+/// DexFiles' default apps for those extensions (see `docs/apps-dex.md`).
+#[derive(Clone, Debug)]
+pub struct DexApp {
+    /// As [`AppInfo::id`].
+    pub id: String,
+    pub label: String,
+    /// Lowercase, without the dot.
+    pub exts: Vec<String>,
+}
+
+/// What a Dex app declares: Android, an activity's `<meta-data>` of this name; desktop, a
+/// `.desktop` key `X-DexFiles-Extensions`. The value lists extensions (`pdf, xps` or `pdf;xps`).
+pub const EXTENSIONS_KEY: &str = "io.github.dexfiles.extensions";
+
+/// The extensions of a declaration: lowercase, without dots, no repeats.
+pub fn parse_extensions(value: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for e in value.split([',', ';', ' ', '\t']) {
+        let e = e
+            .trim()
+            .trim_start_matches("*.")
+            .trim_start_matches('.')
+            .to_lowercase();
+        if !e.is_empty() && e.chars().all(|c| c.is_ascii_alphanumeric()) && !out.contains(&e) {
+            out.push(e);
+        }
+    }
+    out
+}
+
+/// The installed Dex apps that declare their extensions (blocks: run on a worker).
+pub fn dex_apps() -> Vec<DexApp> {
+    #[cfg(target_os = "android")]
+    {
+        crate::android::dex_apps()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        desktop::entries()
+            .into_iter()
+            .filter(|e| !e.dex_extensions.is_empty())
+            .map(|e| DexApp {
+                id: e.id,
+                label: e.name,
+                exts: e.dex_extensions,
+            })
+            .collect()
+    }
+}
+
 /// The MIME type of an extension (`application/octet-stream` if unknown).
 pub fn mime_for(ext: &str) -> String {
     match ext {
@@ -71,6 +122,8 @@ pub mod desktop {
         pub name: String,
         pub exec: String,
         pub mime_types: Vec<String>,
+        /// `X-DexFiles-Extensions`: a Dex app's own extensions.
+        pub dex_extensions: Vec<String>,
     }
 
     fn dirs() -> Vec<PathBuf> {
@@ -93,6 +146,7 @@ pub mod desktop {
     pub fn parse(id: &str, text: &str, lang: &str) -> Option<DesktopEntry> {
         let mut in_entry = false;
         let (mut name, mut local_name, mut exec, mut mime) = (None, None, None, Vec::new());
+        let mut dex = Vec::new();
         let mut hidden = false;
         for line in text.lines() {
             let line = line.trim();
@@ -117,6 +171,7 @@ pub mod desktop {
                         .map(str::to_owned)
                         .collect()
                 }
+                "X-DexFiles-Extensions" => dex = super::parse_extensions(v),
                 "NoDisplay" | "Hidden" if v == "true" => hidden = true,
                 "Type" if v != "Application" => hidden = true,
                 _ if !lang.is_empty() && k == format!("Name[{lang}]") => {
@@ -133,6 +188,7 @@ pub mod desktop {
             name: local_name.or(name)?,
             exec: exec?,
             mime_types: mime,
+            dex_extensions: dex,
         })
     }
 
@@ -270,5 +326,23 @@ pub mod desktop {
             );
             assert_eq!(command("gimp", p), vec!["gimp", "/tmp/a b.png"]);
         }
+    }
+}
+
+#[cfg(test)]
+mod dex_tests {
+    #[test]
+    fn declarations() {
+        assert_eq!(
+            super::parse_extensions(" PDF, .xps;*.oxps  pdf"),
+            vec!["pdf", "xps", "oxps"]
+        );
+        let e = super::desktop::parse(
+            "dexpdfcraft.desktop",
+            "[Desktop Entry]\nType=Application\nName=DexPdfCraft\nExec=dexpdfcraft %f\nX-DexFiles-Extensions=pdf;\n",
+            "",
+        )
+        .unwrap_or_else(|| unreachable!());
+        assert_eq!(e.dex_extensions, vec!["pdf"]);
     }
 }

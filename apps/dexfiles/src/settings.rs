@@ -205,6 +205,9 @@ pub struct Settings {
     pub search_subfolders: bool,
     /// DexFiles' own default apps, by extension.
     pub default_apps: Vec<DefaultApp>,
+    /// Extensions Dex apps declared, already offered as default apps (`ext|app`): one the user
+    /// removed or changed is not set again.
+    pub dex_offered: Vec<String>,
     /// Colour tags (see [`crate::tags`]).
     pub tags: HashMap<Location, Vec<u8>>,
 }
@@ -253,6 +256,7 @@ impl Default for Settings {
             search_subfolders: true,
             default_apps: Vec::new(),
             tags: HashMap::new(),
+            dex_offered: Vec::new(),
         }
     }
 }

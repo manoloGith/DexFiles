@@ -45,7 +45,10 @@ informe.
 20. Etiquetas: menú contextual ▸ un color; la barra lateral lo lista; arrastrar archivos a un
     color; renombrar o mover un archivo etiquetado (conserva la etiqueta).
 21. Renombrado por lotes: seleccionar varios ▸ F2 ▸ Numerar «Viaje #».
-22. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
+22. Apps Dex: con DexPdfCraft instalado (versión que declara `.pdf`), abrir DexFiles: aviso
+    «Apps predeterminadas a partir de ahora: DexPdfCraft (.pdf)»; doble clic en un PDF lo abre
+    en DexPdfCraft. Quitarla en Ajustes y volver a la ventana: no vuelve.
+23. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
 
 ## Tests automáticos
 

@@ -1189,6 +1189,15 @@ fn settings_dialog(app: &mut App, ctx: &egui::Context) -> bool {
                         }
                     });
                 }
+                // Dex apps: set again what was removed (without replacing other choices).
+                if ui
+                    .small_button(t("dex_apps_again"))
+                    .on_hover_text(t("dex_apps_again_hint"))
+                    .clicked()
+                {
+                    app.settings.dex_offered.clear();
+                    app.rescan_dex_apps();
+                }
                 ui.horizontal(|ui| {
                     let id = egui::Id::unique("new-default-ext");
                     let mut ext: String = ui.data(|d| d.get_temp(id)).unwrap_or_default();

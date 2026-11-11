@@ -52,6 +52,7 @@ class MainActivity : CraftActivity() {
             "share" -> share(args.getJSONArray("paths"), args.optBoolean("email"))
             "media_scan" -> { mediaScan(args.getJSONArray("paths")); "{}" }
             "video_frame" -> videoFrame(File(args.getString("path")), args.optInt("max", 512))
+            "dex_apps" -> JSONObject().put("apps", dexApps(args.optString("key"))).toString()
             "clip_set" -> { clipSet(args.getJSONArray("paths")); "{}" }
             "clip_import" -> clipImport()
             "drag_out" -> { dragOut(args.getJSONArray("paths")); "{}" }
@@ -167,6 +168,33 @@ class MainActivity : CraftActivity() {
                 .put("label", info.loadLabel(packageManager).toString())
             iconPng(info.loadIcon(packageManager))?.let { item.put("icon", it) }
             out.put(item)
+        }
+        return out
+    }
+
+    /**
+     * The Dex apps: activities that answer [DEX_OPEN] and list the extensions they open in a
+     * `<meta-data>` (docs/apps-dex.md). DexFiles makes them the default apps for those.
+     */
+    private fun dexApps(key: String): JSONArray {
+        val probe = Intent(DEX_OPEN)
+        val flags = PackageManager.GET_META_DATA
+        val found = if (Build.VERSION.SDK_INT >= 33) {
+            packageManager.queryIntentActivities(probe, PackageManager.ResolveInfoFlags.of(flags.toLong()))
+        } else {
+            @Suppress("DEPRECATION") packageManager.queryIntentActivities(probe, flags)
+        }
+        val out = JSONArray()
+        for (info in found) {
+            val ai = info.activityInfo ?: continue
+            if (ai.packageName == packageName) continue
+            val exts = ai.metaData?.getString(key) ?: ai.applicationInfo?.metaData?.getString(key) ?: continue
+            out.put(
+                JSONObject()
+                    .put("id", "${ai.packageName}/${ai.name}")
+                    .put("label", info.loadLabel(packageManager).toString())
+                    .put("extensions", exts)
+            )
         }
         return out
     }
@@ -351,6 +379,8 @@ class MainActivity : CraftActivity() {
         private const val TAG = "dexfiles"
         private const val REQUEST_STORAGE = 0x5100
         private const val CLIP_LABEL = "DexFiles files"
+        /** The action a Dex app's activity answers to be found (it opens files with VIEW). */
+        const val DEX_OPEN = "io.github.dexfiles.action.OPEN"
         private const val DRAG_LABEL = "DexFiles drag"
     }
 }

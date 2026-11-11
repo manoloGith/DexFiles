@@ -182,6 +182,25 @@ pub fn apps_for(ext: &str, mime: &str) -> Vec<crate::apps::AppInfo> {
     out
 }
 
+/// The installed apps that declare the extensions they open (Dex apps).
+pub fn dex_apps() -> Vec<crate::apps::DexApp> {
+    let answer = call("dex_apps", json!({ "key": crate::apps::EXTENSIONS_KEY }));
+    let mut out = Vec::new();
+    for a in answer["apps"].as_array().into_iter().flatten() {
+        let Some(id) = a["id"].as_str() else { continue };
+        let exts = crate::apps::parse_extensions(a["extensions"].as_str().unwrap_or_default());
+        if exts.is_empty() {
+            continue;
+        }
+        out.push(crate::apps::DexApp {
+            id: id.to_owned(),
+            label: a["label"].as_str().unwrap_or(id).to_owned(),
+            exts,
+        });
+    }
+    out
+}
+
 /// Open a file with one app (`package/activity`).
 pub fn open_with(path: &Path, app: &str) -> Result<(), String> {
     let answer = call(

@@ -55,6 +55,8 @@ pub enum Msg {
         space: Option<(u64, u64)>,
     },
     Status(String),
+    /// The installed Dex apps and their extensions.
+    DexApps(Vec<crate::apps::DexApp>),
     /// What a paste found on the system clipboard (`None`: DexFiles' own copy, or no files).
     ClipboardFiles {
         dest: Location,
@@ -182,6 +184,9 @@ pub struct App {
     /// Items dragged out of the window (Android hands them to the system), and when: if they
     /// are dropped back onto the window, they are the originals, not copies.
     drag_out: Option<(Vec<Location>, Instant)>,
+    /// Look for Dex apps (at start, and when the window comes back: one may have been installed).
+    dex_scan_due: bool,
+    was_focused: bool,
     pub dialog: Option<Dialog>,
     pub tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -280,6 +285,8 @@ impl App {
             jobs: Vec::new(),
             clip: None,
             drag_out: None,
+            dex_scan_due: true,
+            was_focused: true,
             dialog: None,
             tx,
             rx,
@@ -560,6 +567,7 @@ impl App {
                     }
                 }
                 Msg::Status(text) => self.say(text),
+                Msg::DexApps(apps) => self.adopt_dex_apps(apps),
                 Msg::ClipboardFiles { dest, paths } => match paths {
                     Some(paths) => self.start_job(JobKind::Transfer {
                         sources: paths.into_iter().map(Location::Local).collect(),
@@ -1241,6 +1249,66 @@ impl App {
             Vec::new()
         };
         crate::platform::clip_files(&self.ctx, &local, text);
+    }
+
+    /// Look for the installed Dex apps on a worker.
+    fn scan_dex_apps(&mut self, ctx: &egui::Context) {
+        let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
+        if focused && !self.was_focused {
+            self.dex_scan_due = true;
+        }
+        self.was_focused = focused;
+        if !std::mem::take(&mut self.dex_scan_due) {
+            return;
+        }
+        let (tx, ctx) = (self.tx.clone(), ctx.clone());
+        let _ = std::thread::Builder::new()
+            .name("dexfiles-dex-apps".into())
+            .spawn(move || {
+                let apps = crate::apps::dex_apps();
+                if !apps.is_empty() {
+                    let _ = tx.send(Msg::DexApps(apps));
+                    ctx.request_repaint();
+                }
+            });
+    }
+
+    pub fn rescan_dex_apps(&mut self) {
+        self.dex_scan_due = true;
+    }
+
+    /// Each extension a Dex app declares becomes DexFiles' default for it, once: unless another
+    /// app is already the default, and not again if the user removed or changed it.
+    pub fn adopt_dex_apps(&mut self, apps: Vec<crate::apps::DexApp>) {
+        let mut added: Vec<String> = Vec::new();
+        for a in &apps {
+            let mut exts = Vec::new();
+            for ext in &a.exts {
+                let key = format!("{ext}|{}", a.id);
+                if self.settings.dex_offered.contains(&key) {
+                    continue;
+                }
+                self.settings.dex_offered.push(key);
+                if self.settings.default_app(ext).is_none() {
+                    self.settings
+                        .default_apps
+                        .push(crate::settings::DefaultApp {
+                            ext: ext.clone(),
+                            app: a.id.clone(),
+                            label: a.label.clone(),
+                        });
+                    exts.push(format!(".{ext}"));
+                }
+            }
+            if !exts.is_empty() {
+                added.push(format!("{} ({})", a.label, exts.join(", ")));
+            }
+        }
+        if !added.is_empty() {
+            self.settings.default_apps.sort_by(|a, b| a.ext.cmp(&b.ext));
+            self.say(tf("dex_apps_added", added.join(" · ")));
+            self.mark_dirty();
+        }
     }
 
     /// Tag these items with colour `c`.
@@ -2055,6 +2123,7 @@ impl eframe::App for App {
         self.periodic();
         self.watch_folders();
         self.thumbs.update(ctx);
+        self.scan_dex_apps(ctx);
         self.closing(ctx);
         self.keyboard(ctx);
         self.refresh_visible_all();
