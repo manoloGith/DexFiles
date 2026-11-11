@@ -176,7 +176,7 @@ pub fn space_for(app: &App, l: Location) -> Option<(u64, u64)> {
                 path: "/".into(),
             })
             .copied(),
-        Location::Trash => None,
+        Location::Trash | Location::Tag(_) => None,
         Location::Archive { archive, .. } => space_for(app, (**archive).clone()),
     }
 }
@@ -291,6 +291,7 @@ pub fn job_title(kind: &crate::ops::JobKind) -> String {
         JobKind::Extract { archive, .. } => tf("job_extract", archive.name()),
         JobKind::Mkdir { location } | JobKind::NewFile { location } => location.name(),
         JobKind::Rename { from, .. } => from.name(),
+        JobKind::RenameMany { pairs } => tf("rename_n", pairs.len()),
     }
 }
 
@@ -579,6 +580,51 @@ pub fn entry_icon(app: &mut App, ui: &Ui, rect: Rect, e: &Entry, allow_thumb: bo
         painter.circle_filled(b.center(), b.width() / 2.0, Color32::WHITE);
         icons::sym(painter, b.shrink(1.0), Sym::Forward, Color32::from_gray(60));
     }
+    // Colour tags: overlapping dots at the icon's bottom right.
+    if let Some(colors) = app.settings.tags.get(&e.location)
+        && !colors.is_empty()
+    {
+        let d = (rect.height() * 0.3).clamp(7.0, 14.0);
+        let ring = if app.dark {
+            Color32::from_gray(30)
+        } else {
+            Color32::WHITE
+        };
+        let mut x = rect.right() - d / 2.0;
+        let y = rect.bottom() - d / 2.0;
+        for &c in colors.iter().rev().take(3) {
+            painter.circle_filled(pos2(x, y), d / 2.0 + 1.2, ring);
+            painter.circle_filled(pos2(x, y), d / 2.0, crate::tags::color(c));
+            x -= d * 0.55;
+        }
+    }
+}
+
+/// A row of the colour tags, to put on or take off the selection.
+pub fn tag_row(app: &mut App, ui: &mut Ui, sel: &[Location]) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        for c in 0..crate::tags::COUNT {
+            let on = !sel.is_empty()
+                && sel
+                    .iter()
+                    .all(|l| app.settings.tags.get(l).is_some_and(|v| v.contains(&c)));
+            let (r, resp) = ui.allocate_exact_size(Vec2::splat(20.0), Sense::click());
+            let color = crate::tags::color(c);
+            let rad = if resp.hovered() { 9.0 } else { 8.0 };
+            ui.painter().circle_filled(r.center(), rad, color);
+            if on {
+                ui.painter().circle_stroke(
+                    r.center(),
+                    rad + 2.0,
+                    Stroke::new(1.5, ui.visuals().text_color()),
+                );
+            }
+            if resp.on_hover_text(crate::tags::name(c)).clicked() {
+                app.actions.push(Action::ToggleTag(sel.to_vec(), c));
+            }
+        }
+    });
 }
 
 fn display_name(app: &App, e: &Entry) -> String {
@@ -715,7 +761,7 @@ fn item_menu(app: &mut App, ui: &mut Ui, p: usize, e: &Entry) {
     }
     if app.settings.dual_pane {
         let other = app.tab(1 - p).location().clone();
-        if other != Location::Trash {
+        if !other.is_virtual() {
             if ui.button(t("copy_to_other")).clicked() {
                 app.actions.push(Action::Transfer {
                     sources: sel.clone(),
@@ -735,6 +781,11 @@ fn item_menu(app: &mut App, ui: &mut Ui, p: usize, e: &Entry) {
     if !many && ui.button(t("rename")).clicked() {
         app.actions.push(Action::Rename(e.clone()));
     }
+    if many && ui.button(tf("rename_n", sel.len())).clicked() {
+        app.actions.push(Action::BatchRename(sel.clone()));
+    }
+    ui.separator();
+    tag_row(app, ui, &sel);
     ui.separator();
     ui.menu_button(t("compress"), |ui| {
         if ui.button(t("compress_options")).clicked() {
@@ -826,6 +877,12 @@ pub fn background_menu(app: &mut App, ui: &mut Ui, p: usize) {
     if here == Location::Trash {
         if ui.button(t("empty_trash")).clicked() {
             app.actions.push(Action::AskEmptyTrash);
+        }
+        return;
+    }
+    if let Location::Tag(_) = here {
+        if ui.button(t("refresh")).clicked() {
+            app.actions.push(Action::Refresh(p));
         }
         return;
     }
@@ -1659,4 +1716,3 @@ fn drag_ghost(app: &App, ctx: &egui::Context) {
         });
     let _ = app;
 }
-

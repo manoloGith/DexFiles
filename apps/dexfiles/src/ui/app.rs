@@ -55,6 +55,11 @@ pub enum Msg {
         space: Option<(u64, u64)>,
     },
     Status(String),
+    /// What a paste found on the system clipboard (`None`: DexFiles' own copy, or no files).
+    ClipboardFiles {
+        dest: Location,
+        paths: Option<Vec<PathBuf>>,
+    },
 }
 
 /// What the interface asks for.
@@ -125,6 +130,10 @@ pub enum Action {
         to: Location,
     },
     MkdirNow(Location, bool),
+    /// Put a colour tag on these items, or take it off if they all have it.
+    ToggleTag(Vec<Location>, u8),
+    BatchRename(Vec<Location>),
+    RenameManyNow(Vec<(Location, Location)>),
 }
 
 /// Files copied or cut, waiting to be pasted.
@@ -170,6 +179,9 @@ pub struct App {
     pub active_pane: usize,
     pub jobs: Vec<Job>,
     pub clip: Option<FileClip>,
+    /// Items dragged out of the window (Android hands them to the system), and when: if they
+    /// are dropped back onto the window, they are the originals, not copies.
+    drag_out: Option<(Vec<Location>, Instant)>,
     pub dialog: Option<Dialog>,
     pub tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -221,6 +233,7 @@ impl App {
         crate::i18n::set_language(settings.language);
         settings.init_favorites();
         vfs::servers::set_servers(&settings.servers);
+        crate::tags::publish(&settings.tags);
         super::theme::install_fonts(&ctx);
         egui_extras_free_image_loaders(&ctx);
         let (tx, rx) = channel();
@@ -266,6 +279,7 @@ impl App {
             active_pane,
             jobs: Vec::new(),
             clip: None,
+            drag_out: None,
             dialog: None,
             tx,
             rx,
@@ -425,7 +439,7 @@ impl App {
                 server: *server,
                 path: "/".into(),
             },
-            Location::Trash => return,
+            Location::Trash | Location::Tag(_) => return,
         };
         let tx = self.tx.clone();
         let target = location.clone();
@@ -546,6 +560,14 @@ impl App {
                     }
                 }
                 Msg::Status(text) => self.say(text),
+                Msg::ClipboardFiles { dest, paths } => match paths {
+                    Some(paths) => self.start_job(JobKind::Transfer {
+                        sources: paths.into_iter().map(Location::Local).collect(),
+                        dest,
+                        mode: Mode::Move,
+                    }),
+                    None => self.paste_own(dest),
+                },
                 Msg::ViewerImage { index, px, result } => {
                     super::viewer::loaded(self, index, px, result)
                 }
@@ -666,6 +688,19 @@ impl App {
     }
 
     pub fn start_job(&mut self, kind: JobKind) {
+        // Moved items keep their tags.
+        if let JobKind::Transfer {
+            sources,
+            dest,
+            mode: Mode::Move,
+        } = &kind
+            && !self.settings.tags.is_empty()
+        {
+            for s in sources {
+                crate::tags::moved(&mut self.settings.tags, s, &dest.join(&s.name()));
+            }
+            crate::tags::publish(&self.settings.tags);
+        }
         let job = ops::start(&self.ctx, kind);
         self.jobs.push(job);
     }
@@ -883,16 +918,19 @@ impl App {
             }
             Action::Copy(_) | Action::Cut(_) => {}
             Action::Paste(dest) => {
-                if let Some(clip) = self.clip.clone() {
-                    let mode = if clip.cut { Mode::Move } else { Mode::Copy };
-                    if clip.cut {
-                        self.clip = None;
-                    }
-                    self.start_job(JobKind::Transfer {
-                        sources: clip.items,
-                        dest,
-                        mode,
-                    });
+                if crate::platform::DRAG_OUT {
+                    // Files another app copied come first; the system clipboard is read (and
+                    // they are fetched) off the interface thread.
+                    let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
+                    let _ = std::thread::Builder::new()
+                        .name("dexfiles-clipboard".into())
+                        .spawn(move || {
+                            let paths = crate::platform::clipboard_import();
+                            let _ = tx.send(Msg::ClipboardFiles { dest, paths });
+                            ctx.request_repaint();
+                        });
+                } else {
+                    self.paste_own(dest);
                 }
             }
             Action::Transfer {
@@ -957,7 +995,59 @@ impl App {
             Action::Rename(e) => {
                 self.dialog = Some(Dialog::rename(&e, self.settings.show_extensions))
             }
-            Action::RenameNow { from, to } => self.start_job(JobKind::Rename { from, to }),
+            Action::RenameNow { from, to } => {
+                crate::tags::moved(&mut self.settings.tags, &from, &to);
+                self.tags_changed();
+                self.start_job(JobKind::Rename { from, to });
+            }
+            Action::RenameManyNow(pairs) => {
+                for (from, to) in &pairs {
+                    crate::tags::moved(&mut self.settings.tags, from, to);
+                }
+                self.tags_changed();
+                self.start_job(JobKind::RenameMany { pairs });
+            }
+            Action::BatchRename(items) => {
+                let p = self.active_pane;
+                let tab = self.tab(p);
+                let entries: Vec<Entry> = items
+                    .iter()
+                    .filter_map(|l| tab.items().find(|e| e.location == *l).cloned())
+                    .collect();
+                let batch: std::collections::HashSet<&Location> = items.iter().collect();
+                let taken = tab
+                    .source()
+                    .iter()
+                    .filter(|e| !batch.contains(&e.location))
+                    .map(|e| e.name.to_lowercase())
+                    .collect();
+                if entries.len() > 1 {
+                    self.dialog =
+                        Some(Dialog::BatchRename(Box::new(super::dialogs::BatchRename {
+                            items: entries,
+                            rule: crate::rename::Rule::default(),
+                            taken,
+                        })));
+                }
+            }
+            Action::ToggleTag(items, c) => {
+                let all = items
+                    .iter()
+                    .all(|l| self.settings.tags.get(l).is_some_and(|v| v.contains(&c)));
+                if all {
+                    for l in &items {
+                        if let Some(v) = self.settings.tags.get_mut(l) {
+                            v.retain(|x| *x != c);
+                            if v.is_empty() {
+                                self.settings.tags.remove(l);
+                            }
+                        }
+                    }
+                    self.tags_changed();
+                } else {
+                    self.add_tag(&items, c);
+                }
+            }
             Action::AskCompress(items) if !items.is_empty() => {
                 if items.iter().any(|l| !l.is_local()) {
                     self.say(t("compress_local_only"));
@@ -1138,7 +1228,102 @@ impl App {
             .map(|l| l.address(&self.settings.servers))
             .collect::<Vec<_>>()
             .join("\n");
-        crate::platform::copy_text(&self.ctx, text);
+        let local: Vec<PathBuf> = items
+            .iter()
+            .filter_map(|l| match l {
+                Location::Local(p) => Some(p.clone()),
+                _ => None,
+            })
+            .collect();
+        let local = if local.len() == items.len() {
+            local
+        } else {
+            Vec::new()
+        };
+        crate::platform::clip_files(&self.ctx, &local, text);
+    }
+
+    /// Tag these items with colour `c`.
+    pub fn add_tag(&mut self, items: &[Location], c: u8) {
+        for l in items {
+            if l.is_virtual() {
+                continue;
+            }
+            let v = self.settings.tags.entry(l.as_listed()).or_default();
+            if !v.contains(&c) {
+                v.push(c);
+                v.sort_unstable();
+            }
+        }
+        self.tags_changed();
+    }
+
+    /// The tags changed: listings of a colour are read again.
+    pub fn tags_changed(&mut self) {
+        crate::tags::publish(&self.settings.tags);
+        for p in 0..2 {
+            for i in 0..self.panes[p].tabs.len() {
+                if matches!(self.panes[p].tabs[i].location(), Location::Tag(_)) {
+                    self.load(p, i);
+                }
+            }
+        }
+    }
+
+    /// Paste what was copied or cut in DexFiles.
+    fn paste_own(&mut self, dest: Location) {
+        if let Some(clip) = self.clip.clone() {
+            let mode = if clip.cut { Mode::Move } else { Mode::Copy };
+            if clip.cut {
+                self.clip = None;
+            }
+            self.start_job(JobKind::Transfer {
+                sources: clip.items,
+                dest,
+                mode,
+            });
+        }
+    }
+
+    /// A drag of items reaching the window's edge leaves it: the system takes it over (Android),
+    /// so other apps can take the files.
+    fn drag_out_of_window(&mut self, ctx: &egui::Context) {
+        if !crate::platform::DRAG_OUT {
+            return;
+        }
+        let Some(payload) = egui::DragAndDrop::payload::<DragPayload>(ctx) else {
+            return;
+        };
+        let screen = ctx.content_rect();
+        let out = ctx.input(|i| {
+            i.events
+                .iter()
+                .any(|e| matches!(e, egui::Event::PointerGone))
+                || i.pointer.latest_pos().is_some_and(|p| {
+                    p.x <= screen.left() + 2.0
+                        || p.y <= screen.top() + 2.0
+                        || p.x >= screen.right() - 3.0
+                        || p.y >= screen.bottom() - 3.0
+                })
+        });
+        if !out {
+            return;
+        }
+        let paths: Vec<PathBuf> = payload
+            .items
+            .iter()
+            .filter_map(|l| match l {
+                Location::Local(p) => Some(p.clone()),
+                _ => None,
+            })
+            .collect();
+        egui::DragAndDrop::clear_payload(ctx);
+        if paths.is_empty() {
+            self.say(t("drag_out_local_only"));
+            return;
+        }
+        self.drag_out = Some((payload.items.clone(), Instant::now()));
+        crate::platform::drag_out(&paths);
     }
 
     pub fn is_in_trash(&self, p: &std::path::Path) -> bool {
@@ -1376,7 +1561,7 @@ impl App {
         if pressed(ctx, Modifiers::COMMAND, Key::X) || cut_ev {
             self.actions.push(Action::Cut(sel.clone()));
         }
-        if (pressed(ctx, Modifiers::COMMAND, Key::V) || paste_ev) && here != Location::Trash {
+        if (pressed(ctx, Modifiers::COMMAND, Key::V) || paste_ev) && !here.is_virtual() {
             self.actions.push(Action::Paste(here.clone()));
         }
         if pressed(ctx, Modifiers::COMMAND, Key::I) {
@@ -1396,9 +1581,13 @@ impl App {
             }
         }
         if pressed(ctx, Modifiers::NONE, Key::F2) {
-            let entry = self.tab(p).selected_entries().into_iter().next();
-            if let Some(e) = entry {
-                self.actions.push(Action::Rename(e));
+            if sel.len() > 1 {
+                self.actions.push(Action::BatchRename(sel.clone()));
+            } else {
+                let entry = self.tab(p).selected_entries().into_iter().next();
+                if let Some(e) = entry {
+                    self.actions.push(Action::Rename(e));
+                }
             }
         }
         if pressed(ctx, Modifiers::NONE, Key::Backspace) {
@@ -1642,6 +1831,26 @@ impl App {
         if paths.is_empty() {
             return;
         }
+        // Our own drag, dropped back onto the window: the files themselves, not copies of them.
+        let mut own = None;
+        if let Some((items, at)) = self.drag_out.take()
+            && at.elapsed() < Duration::from_secs(300)
+        {
+            let mut a: Vec<String> = items.iter().map(Location::name).collect();
+            let mut b: Vec<String> = paths
+                .iter()
+                .map(|p| {
+                    p.file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                })
+                .collect();
+            a.sort();
+            b.sort();
+            if a == b {
+                own = Some(items);
+            }
+        }
         let pos = ctx.input(|i| i.pointer.hover_pos());
         let dest = pos
             .and_then(|pos| {
@@ -1652,7 +1861,24 @@ impl App {
                     .map(|t| t.dest.clone())
             })
             .unwrap_or_else(|| self.tab(self.active_pane).location().clone());
-        if dest == Location::Trash {
+        if dest.is_virtual() {
+            return;
+        }
+        if let Some(items) = own {
+            for p in &paths {
+                let _ = std::fs::remove_file(p);
+            }
+            let items: Vec<Location> = items
+                .into_iter()
+                .filter(|l| l.parent().as_ref() != Some(&dest) && *l != dest)
+                .collect();
+            if !items.is_empty() {
+                self.start_job(JobKind::Transfer {
+                    sources: items,
+                    dest,
+                    mode: Mode::Copy,
+                });
+            }
             return;
         }
         let sources: Vec<Location> = paths.into_iter().map(Location::Local).collect();
@@ -1686,6 +1912,11 @@ impl App {
         let dest = target.dest.clone();
         if target.trash {
             self.actions.push(Action::Trash(payload.items.clone()));
+            return;
+        }
+        // Dropped on a colour: tagged with it.
+        if let Location::Tag(c) = dest {
+            self.add_tag(&payload.items, c);
             return;
         }
         let items: Vec<Location> = payload
@@ -1836,6 +2067,7 @@ impl eframe::App for App {
         self.narrow = ctx.content_rect().width() < 720.0;
         self.drop_targets.clear();
         super::view::window(self, ui);
+        self.drag_out_of_window(&ctx);
         self.external_drops(&ctx);
         self.finish_drag(&ctx);
         let actions = std::mem::take(&mut self.actions);

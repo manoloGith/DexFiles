@@ -32,6 +32,8 @@ pub enum Location {
         archive: Box<Location>,
         inner: String,
     },
+    /// What carries a colour tag (see [`crate::tags`]), wherever it is.
+    Tag(u8),
 }
 
 /// The last part of a `/`-separated path.
@@ -89,6 +91,7 @@ impl Location {
                 .unwrap_or_default(),
             Location::Remote { path, .. } => path_name(path),
             Location::Trash => String::new(),
+            Location::Tag(c) => crate::tags::name(*c),
             Location::Archive { archive, inner } => {
                 let n = path_name(inner);
                 if n.is_empty() { archive.name() } else { n }
@@ -106,6 +109,11 @@ impl Location {
         }
     }
 
+    /// The trash or a tag: a list of things that are elsewhere, where nothing can be created.
+    pub fn is_virtual(&self) -> bool {
+        matches!(self, Location::Trash | Location::Tag(_))
+    }
+
     /// Inside an archive.
     pub fn in_archive(&self) -> bool {
         matches!(self, Location::Archive { .. })
@@ -118,7 +126,7 @@ impl Location {
                 server: *server,
                 path,
             }),
-            Location::Trash => None,
+            Location::Trash | Location::Tag(_) => None,
             // The archive's top goes up to the folder the archive is in.
             Location::Archive { archive, inner } => match path_parent(inner) {
                 Some(inner) => Some(Location::Archive {
@@ -138,6 +146,7 @@ impl Location {
                 path: path_join(path, name),
             },
             Location::Trash => Location::Trash,
+            Location::Tag(c) => Location::Tag(*c),
             Location::Archive { archive, inner } => Location::Archive {
                 archive: archive.clone(),
                 inner: path_join(inner, name),
@@ -160,6 +169,7 @@ impl Location {
                 },
             ) => s1 == s2 && path_starts_with(a, b),
             (Location::Trash, Location::Trash) => true,
+            (Location::Tag(a), Location::Tag(b)) => a == b,
             (
                 Location::Archive {
                     archive: x,
@@ -195,7 +205,7 @@ impl Location {
                     path.clone()
                 }
             }
-            Location::Trash => String::new(),
+            Location::Trash | Location::Tag(_) => String::new(),
             Location::Archive { inner, .. } => {
                 if inner.is_empty() {
                     "/".to_owned()
@@ -219,6 +229,9 @@ impl Location {
                 None => format!("?{path}"),
             },
             Location::Trash => "trash:///".to_owned(),
+            Location::Tag(c) => {
+                format!("tag:///{}", crate::tags::key(*c).trim_start_matches("tag_"))
+            }
             Location::Archive { archive, inner } => format!(
                 "{}{}",
                 archive.address(servers),
@@ -430,7 +443,7 @@ pub fn fs_for(location: &Location) -> io::Result<Arc<dyn Fs>> {
     match location {
         Location::Local(_) => Ok(local::shared()),
         Location::Remote { server, .. } => servers::connection(*server),
-        Location::Trash => Ok(local::shared()),
+        Location::Trash | Location::Tag(_) => Ok(local::shared()),
         Location::Archive { archive, .. } => archive_fs::open(archive),
     }
 }
@@ -439,6 +452,9 @@ pub fn fs_for(location: &Location) -> io::Result<Arc<dyn Fs>> {
 pub fn list(location: &Location) -> io::Result<Vec<Entry>> {
     if *location == Location::Trash {
         return Ok(crate::trash::list());
+    }
+    if let Location::Tag(c) = location {
+        return Ok(crate::tags::list(*c));
     }
     let fs = fs_for(location)?;
     let raw = fs.list(&location.backend_path())?;

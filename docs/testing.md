@@ -35,7 +35,17 @@ informe.
 15. Doble clic en una foto (lista o vista previa): visor a pantalla completa, ← → Esc y rueda.
 16. Doble clic en un audio o vídeo: reproductor a pantalla completa; los controles se ocultan
     al dejar quieto el ratón y vuelven al moverlo; Esc o doble clic salen; Espacio pausa.
-17. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
+17. Espacio sobre una foto (visor), una canción o un vídeo (reproductor a pantalla completa, con el
+    botón de lista: aparece a la derecha) y un PDF (vista rápida a pantalla completa, sin temblar;
+    ← → pasan al archivo siguiente).
+18. Arrastrar archivos fuera de la ventana de DexFiles hasta Mis archivos u otra app en DeX (o
+    pantalla dividida): se sueltan allí. Volver a soltarlos en otra carpeta de DexFiles: copia.
+19. Copiar archivos en DexFiles y pegarlos en otra app (correo, Notas, Mis archivos). Copiar una
+    foto en otra app (Galería ▸ Copiar) y pegar en DexFiles (Ctrl+V).
+20. Etiquetas: menú contextual ▸ un color; la barra lateral lo lista; arrastrar archivos a un
+    color; renombrar o mover un archivo etiquetado (conserva la etiqueta).
+21. Renombrado por lotes: seleccionar varios ▸ F2 ▸ Numerar «Viaje #».
+22. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
 
 ## Tests automáticos
 

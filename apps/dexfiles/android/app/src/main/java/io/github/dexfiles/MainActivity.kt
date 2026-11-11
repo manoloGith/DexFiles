@@ -52,6 +52,9 @@ class MainActivity : CraftActivity() {
             "share" -> share(args.getJSONArray("paths"), args.optBoolean("email"))
             "media_scan" -> { mediaScan(args.getJSONArray("paths")); "{}" }
             "video_frame" -> videoFrame(File(args.getString("path")), args.optInt("max", 512))
+            "clip_set" -> { clipSet(args.getJSONArray("paths")); "{}" }
+            "clip_import" -> clipImport()
+            "drag_out" -> { dragOut(args.getJSONArray("paths")); "{}" }
             else -> if (op.startsWith("player_")) player.handle(op.removePrefix("player_"), args) else { Log.w(TAG, "files: unknown operation $op"); "{}" }
         }
     } catch (e: Exception) {
@@ -239,6 +242,98 @@ class MainActivity : CraftActivity() {
         }
     }
 
+    private val clipboard by lazy { getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager }
+
+    /**
+     * Copied files go to the system clipboard as content URIs (each with its path as text), so
+     * other apps can paste them (a mail, a note, a chat), and DexFiles knows them for its own.
+     */
+    private fun clipSet(paths: JSONArray) {
+        val files = (0 until paths.length()).map { File(paths.getString(it)) }.filter { it.exists() }
+        if (files.isEmpty()) return
+        val items = files.mapNotNull { f -> runCatching { ClipData.Item(f.absolutePath, null, uriFor(f)) }.getOrNull() }
+        if (items.isEmpty()) return
+        val mimes = files.map { mimeFor(it) }.distinct().toTypedArray()
+        val clip = ClipData(android.content.ClipDescription(CLIP_LABEL, mimes), items.first())
+        items.drop(1).forEach { clip.addItem(it) }
+        runOnUiThread { runCatching { clipboard.setPrimaryClip(clip) } }
+    }
+
+    /**
+     * Files another app put on the clipboard, copied into the cache to paste:
+     * `{"ours": true}` when the clipboard holds DexFiles' own copy, `{"paths": [...]}` otherwise.
+     */
+    private fun clipImport(): String {
+        val out = JSONObject()
+        val clip = clipboard.primaryClip ?: return out.toString()
+        if (clip.description.label?.toString() == CLIP_LABEL) return out.put("ours", true).toString()
+        val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }.filter { it.scheme == "content" || it.scheme == "file" }
+        if (uris.isEmpty()) return out.toString()
+        val dir = File(cacheDir, "clipboard-import/${System.currentTimeMillis()}").apply { mkdirs() }
+        val paths = JSONArray()
+        for ((i, uri) in uris.withIndex()) {
+            runCatching {
+                val name = displayName(uri)?.replace('/', '_')?.takeIf { it.isNotBlank() } ?: "file-${i + 1}"
+                var target = File(dir, name)
+                var n = 2
+                while (target.exists()) target = File(dir, "${target.nameWithoutExtension} ($n).${target.extension}".removeSuffix(".")).also { n++ }
+                contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { input.copyTo(it) } }
+                if (target.exists()) paths.put(target.absolutePath)
+            }.onFailure { Log.w(TAG, "clipboard import: $uri: $it") }
+        }
+        return out.put("paths", paths).toString()
+    }
+
+    private fun displayName(uri: Uri): String? = runCatching {
+        contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/')
+
+    /**
+     * A drag of files that leaves the window becomes a system drag, which other apps (My Files,
+     * a mail, a chat in split screen or in another DeX window) can take.
+     */
+    private fun dragOut(paths: JSONArray) {
+        val files = (0 until paths.length()).map { File(paths.getString(it)) }.filter { it.exists() }
+        if (files.isEmpty()) return
+        val items = files.mapNotNull { f -> runCatching { ClipData.Item(f.absolutePath, null, uriFor(f)) }.getOrNull() }
+        if (items.isEmpty()) return
+        val mimes = files.map { mimeFor(it) }.distinct().toTypedArray()
+        val clip = ClipData(android.content.ClipDescription(DRAG_LABEL, mimes), items.first())
+        items.drop(1).forEach { clip.addItem(it) }
+        val label = if (files.size == 1) files[0].name else "${files.size} × ${files[0].name}…"
+        runOnUiThread {
+            val view = window.decorView
+            val flags = android.view.View.DRAG_FLAG_GLOBAL or android.view.View.DRAG_FLAG_GLOBAL_URI_READ
+            val started = runCatching { view.startDragAndDrop(clip, LabelShadow(view, label), DRAG_LABEL, flags) }.getOrDefault(false)
+            Log.i(TAG, "drag out of ${files.size} file(s): started=$started")
+        }
+    }
+
+    /** The drag's picture: a small rounded label with the file name (or how many). */
+    private class LabelShadow(view: android.view.View, private val label: String) : android.view.View.DragShadowBuilder(view) {
+        private val density = view.resources.displayMetrics.density
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = 14f * density
+            color = android.graphics.Color.WHITE
+        }
+        private val bg = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = 0xE0_0A_5C_C8.toInt() }
+        private val text = if (label.length > 40) label.take(39) + "…" else label
+        private val w = (paint.measureText(text) + 24 * density).toInt()
+        private val h = (32 * density).toInt()
+
+        override fun onProvideShadowMetrics(size: android.graphics.Point, touch: android.graphics.Point) {
+            size.set(w, h)
+            touch.set(w / 2, h / 2)
+        }
+
+        override fun onDrawShadow(canvas: android.graphics.Canvas) {
+            canvas.drawRoundRect(0f, 0f, w.toFloat(), h.toFloat(), 8 * density, 8 * density, bg)
+            canvas.drawText(text, 12 * density, h / 2f - (paint.descent() + paint.ascent()) / 2, paint)
+        }
+    }
+
     private fun mediaScan(paths: JSONArray) {
         val list = Array(paths.length()) { paths.getString(it) }
         MediaScannerConnection.scanFile(applicationContext, list, null, null)
@@ -255,5 +350,7 @@ class MainActivity : CraftActivity() {
     companion object {
         private const val TAG = "dexfiles"
         private const val REQUEST_STORAGE = 0x5100
+        private const val CLIP_LABEL = "DexFiles files"
+        private const val DRAG_LABEL = "DexFiles drag"
     }
 }

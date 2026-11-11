@@ -74,6 +74,15 @@ pub enum Dialog {
     },
     About,
     OpenWith(Box<OpenWith>),
+    BatchRename(Box<BatchRename>),
+}
+
+/// Renaming several items at once under one rule.
+pub struct BatchRename {
+    pub items: Vec<Entry>,
+    pub rule: crate::rename::Rule,
+    /// Names already in the folder (not in the batch), which the new names must not take.
+    pub taken: std::collections::HashSet<String>,
 }
 
 /// The app picker: for one file ("Open with…"), or to choose the default app of a kind of file.
@@ -515,6 +524,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             keep && !close
         }
         Dialog::OpenWith(state) => open_with_dialog(app, ctx, state),
+        Dialog::BatchRename(state) => batch_rename_dialog(app, ctx, state),
         Dialog::About => {
             let mut keep = true;
             let close = modal(ctx, "about", 420.0, |ui| {
@@ -1270,4 +1280,181 @@ fn conflicts(app: &mut App, ctx: &egui::Context) {
         });
     });
     ctx.data_mut(|d| d.insert_temp(id, all));
+}
+
+fn batch_rename_dialog(app: &mut App, ctx: &egui::Context, st: &mut BatchRename) -> bool {
+    use crate::rename::{Case, Mode, apply, problem};
+    let mut keep = true;
+    let close = modal(ctx, "batch-rename", 560.0, |ui| {
+        ui.heading(tf("rename_n", st.items.len()).trim_end_matches('…'));
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            for (m, key) in [
+                (Mode::Replace, "rename_replace"),
+                (Mode::Add, "rename_add"),
+                (Mode::Number, "rename_number"),
+                (Mode::Case, "rename_case"),
+            ] {
+                ui.selectable_value(&mut st.rule.mode, m, t(key));
+            }
+        });
+        ui.add_space(6.0);
+        let r = &mut st.rule;
+        egui::Grid::new("batch-rename-rule")
+            .num_columns(2)
+            .spacing([10.0, 6.0])
+            .show(ui, |ui| match r.mode {
+                Mode::Replace => {
+                    ui.label(t("rename_find"));
+                    ui.add(egui::TextEdit::singleline(&mut r.find).desired_width(300.0));
+                    ui.end_row();
+                    ui.label(t("rename_replace_with"));
+                    ui.add(egui::TextEdit::singleline(&mut r.replace).desired_width(300.0));
+                    ui.end_row();
+                    ui.label("");
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut r.match_case, t("rename_match_case"));
+                        ui.checkbox(&mut r.with_ext, t("rename_with_ext"));
+                    });
+                    ui.end_row();
+                }
+                Mode::Add => {
+                    ui.label(t("rename_prefix"));
+                    ui.add(egui::TextEdit::singleline(&mut r.prefix).desired_width(300.0));
+                    ui.end_row();
+                    ui.label(t("rename_suffix"));
+                    ui.add(egui::TextEdit::singleline(&mut r.suffix).desired_width(300.0));
+                    ui.end_row();
+                }
+                Mode::Number => {
+                    ui.label(t("rename_base"));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut r.base)
+                            .hint_text(t("rename_base_hint"))
+                            .desired_width(300.0),
+                    );
+                    ui.end_row();
+                    ui.label(t("rename_start"));
+                    ui.horizontal(|ui| {
+                        ui.add(egui::DragValue::new(&mut r.start).range(0..=999_999));
+                        ui.label(t("rename_digits"));
+                        ui.add(egui::DragValue::new(&mut r.digits).range(1..=9));
+                    });
+                    ui.end_row();
+                }
+                Mode::Case => {
+                    ui.label(t("rename_case"));
+                    ui.horizontal(|ui| {
+                        for (c, key) in [
+                            (Case::Lower, "case_lower"),
+                            (Case::Upper, "case_upper"),
+                            (Case::Title, "case_title"),
+                            (Case::Sentence, "case_sentence"),
+                        ] {
+                            ui.selectable_value(&mut r.case, c, t(key));
+                        }
+                    });
+                    ui.end_row();
+                }
+            });
+        ui.add_space(8.0);
+        // The preview: every old name and its new one; a name that can't be used is in red.
+        let new: Vec<String> = st
+            .items
+            .iter()
+            .enumerate()
+            .map(|(i, e)| apply(&st.rule, &e.name, e.is_dir(), i))
+            .collect();
+        let mut seen = std::collections::HashMap::<String, usize>::new();
+        for n in &new {
+            *seen.entry(n.to_lowercase()).or_default() += 1;
+        }
+        let issues: Vec<Option<String>> = new
+            .iter()
+            .map(|n| {
+                if let Some(k) = problem(n) {
+                    Some(t(k).to_owned())
+                } else if seen.get(&n.to_lowercase()).copied().unwrap_or(0) > 1 {
+                    Some(t("rename_duplicate").to_owned())
+                } else if st.taken.contains(&n.to_lowercase()) {
+                    Some(t("rename_taken").to_owned())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let changes = st
+            .items
+            .iter()
+            .zip(&new)
+            .filter(|(e, n)| e.name != **n)
+            .count();
+        let bad = issues.iter().filter(|i| i.is_some()).count();
+        let weak = theme::palette(app.dark).weak;
+        egui::Frame::new()
+            .fill(ui.visuals().extreme_bg_color)
+            .corner_radius(6)
+            .inner_margin(8)
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical()
+                    .max_height(260.0)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        egui::Grid::new("batch-rename-preview")
+                            .num_columns(3)
+                            .spacing([8.0, 3.0])
+                            .show(ui, |ui| {
+                                for ((e, n), issue) in st.items.iter().zip(&new).zip(&issues) {
+                                    ui.label(RichText::new(&e.name).color(weak));
+                                    ui.label(RichText::new("»").color(weak));
+                                    match issue {
+                                        Some(why) => {
+                                            ui.label(
+                                                RichText::new(n).color(ui.visuals().error_fg_color),
+                                            )
+                                            .on_hover_text(why);
+                                        }
+                                        None if *n != e.name => {
+                                            ui.label(RichText::new(n).strong());
+                                        }
+                                        None => {
+                                            ui.label(n);
+                                        }
+                                    }
+                                    ui.end_row();
+                                }
+                            });
+                    });
+            });
+        ui.add_space(4.0);
+        ui.label(
+            RichText::new(if bad > 0 {
+                tf("rename_problems", bad)
+            } else {
+                tf("rename_changes", changes)
+            })
+            .small()
+            .color(if bad > 0 {
+                ui.visuals().error_fg_color
+            } else {
+                weak
+            }),
+        );
+        let (ok, cancel) = buttons(ui, t("rename"), false);
+        if ok && bad == 0 && changes > 0 {
+            let pairs: Vec<(Location, Location)> = st
+                .items
+                .iter()
+                .zip(&new)
+                .filter(|(e, n)| e.name != **n)
+                .filter_map(|(e, n)| e.location.parent().map(|p| (e.location.clone(), p.join(n))))
+                .collect();
+            app.actions.push(Action::RenameManyNow(pairs));
+            keep = false;
+        }
+        if cancel {
+            keep = false;
+        }
+    });
+    keep && !close
 }

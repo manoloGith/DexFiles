@@ -140,6 +140,7 @@ fn crumbs(app: &App, loc: &Location) -> Vec<(String, Location)> {
     let mut out = Vec::new();
     match loc {
         Location::Trash => out.push((t("trash").to_owned(), Location::Trash)),
+        Location::Tag(c) => out.push((crate::tags::name(*c), loc.clone())),
         Location::Archive { archive, inner } => {
             // The archive's folder, the archive, then the folders inside it.
             if let Some(parent) = archive.parent() {
@@ -590,7 +591,7 @@ fn more_menu(app: &mut App, ui: &mut Ui, p: usize) {
     egui::Popup::menu(&resp).show(|ui| {
         ui.set_min_width(240.0);
         let here = app.tab(p).location().clone();
-        if here != Location::Trash {
+        if !here.is_virtual() {
             if ui.button(t("new_folder")).clicked() {
                 app.actions.push(Action::NewFolder(here.clone()));
             }

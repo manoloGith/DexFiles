@@ -70,6 +70,10 @@ pub enum JobKind {
         from: Location,
         to: Location,
     },
+    /// Several renames at once (batch rename); names may be swapped among them.
+    RenameMany {
+        pairs: Vec<(Location, Location)>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -443,6 +447,71 @@ fn run(state: &JobState, kind: JobKind) {
                 Err(e) => state.error(&from.name(), &e),
             }
             state.touch(from.parent());
+        }
+        JobKind::RenameMany { pairs } => {
+            rename_many(state, &pairs);
+        }
+    }
+}
+
+/// Batch rename: names taken by another item of the batch go through a temporary name first.
+fn rename_many(state: &JobState, pairs: &[(Location, Location)]) {
+    let total = pairs.len() as u64;
+    let sources: std::collections::HashSet<&Location> = pairs.iter().map(|(f, _)| f).collect();
+    let mut second: Vec<(Location, Location, Location)> = Vec::new();
+    for (i, (from, to)) in pairs.iter().enumerate() {
+        if state.cancel.load(Ordering::SeqCst) {
+            break;
+        }
+        state.update(|s| {
+            s.current = from.name();
+            s.done_items = i as u64;
+            s.total_items = total;
+        });
+        if from == to {
+            continue;
+        }
+        let r = vfs::fs_for(from).and_then(|fs| {
+            if sources.contains(to) {
+                // Its name is freed later in the batch.
+                let tmp = to
+                    .parent()
+                    .map(|p| p.join(&format!(".dexfiles-rename-{i}-{}", to.name())))
+                    .unwrap_or_else(|| to.clone());
+                fs.rename(&from.backend_path(), &tmp.backend_path())?;
+                second.push((from.clone(), tmp, to.clone()));
+                return Ok(());
+            }
+            if exists(fs.as_ref(), to) && from.name().to_lowercase() != to.name().to_lowercase() {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "the name is taken",
+                ));
+            }
+            fs.rename(&from.backend_path(), &to.backend_path())?;
+            state.update(|s| s.created.push(to.clone()));
+            Ok(())
+        });
+        if let Err(e) = r {
+            state.error(&from.name(), &e);
+        }
+        state.touch(from.parent());
+    }
+    for (from, tmp, to) in second {
+        let r = vfs::fs_for(&tmp).and_then(|fs| {
+            if exists(fs.as_ref(), &to) {
+                // Still taken (that item failed): back to its old name.
+                fs.rename(&tmp.backend_path(), &from.backend_path())?;
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "the name is taken",
+                ));
+            }
+            fs.rename(&tmp.backend_path(), &to.backend_path())
+        });
+        match r {
+            Ok(()) => state.update(|s| s.created.push(to.clone())),
+            Err(e) => state.error(&from.name(), &e),
         }
     }
 }

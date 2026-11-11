@@ -20,9 +20,10 @@ servidor real · ⏳ fase siguiente.
 | Atrás / Adelante / Subir | ✅ | Botones, Alt+←/→/↑, Retroceso, botones laterales del ratón; en Android, *Atrás* del sistema vuelve atrás y solo cierra desde la primera carpeta. |
 | Pestañas | ✅ | Ctrl+T, Ctrl+W, Ctrl+Tab, clic central en una carpeta, *Abrir en pestaña nueva*. Soltar archivos sobre una pestaña los lleva a su carpeta. |
 | Favoritos | ✅ | Carpetas estándar al primer arranque; *Añadir a favoritos* o arrastrar una carpeta bajo la lista; reordenar y quitar desde su menú. |
+| Barra espaciadora | ✅ | Abre el visor que toca: imágenes → visor de imágenes; audio y vídeo → reproductor a pantalla completa; lo demás → *vista rápida* a toda la ventana sobre el mismo fondo negro translúcido (PDF, texto, tablas, archivos comprimidos…), con anterior/siguiente por la carpeta. |
 | Visor de imágenes | ✅ | Doble clic en una imagen (lista o vista previa): a toda la ventana sobre fondo negro translúcido; anterior, siguiente, cerrar, teclado y rueda. Si hay una app predeterminada de DexFiles para ese tipo, se usa esa. |
 | Archivos comprimidos como carpetas | ✅ | Doble clic en ZIP, 7z, TAR(.gz/.bz2/.xz/.zst) o RAR: se navega por dentro (solo lectura); abrir, previsualizar, copiar y arrastrar hacia fuera. |
-| Reproductor | 🟡 | Pantalla completa (botón, o doble clic en un audio/vídeo): controles abajo que se ocultan con el ratón quieto; el vídeo se encoge un poco mientras se ven, porque en Android es una superficie aparte que tapa lo que se dibuje encima. |
+| Reproductor | 🟡 | Pantalla completa (botón, Espacio o doble clic en un audio/vídeo): controles abajo que se ocultan con el ratón quieto, lista de reproducción a la derecha; el vídeo se encoge un poco mientras se ven, porque en Android es una superficie aparte que tapa lo que se dibuje encima. |
 | Reproductor (panel) | 🟡 | En el panel de vista previa: audio y vídeo con `MediaPlayer` de Android (el vídeo, en una superficie del sistema colocada sobre su zona). Ocupa la zona de la imagen mientras reproduce el archivo seleccionado y se acopla abajo (un tercio) al cambiar de archivo. Anterior, reproducir/pausa, siguiente, barra de posición, lista (si hay varios) y cerrar. En escritorio solo hay un modo simulado para desarrollar la interfaz. |
 | Panel de vista previa | ✅ imágenes, PDF (primera página, con `hayro`), texto/código, DOCX/ODT/PPTX/ODP (texto), XLSX/XLS/ODS/CSV (tabla), audio (etiquetas y carátula, `lofty`), archivos comprimidos (lista), carpetas · 🟡 vídeo (fotograma con `MediaMetadataRetriever`, solo Android) | Lo que se muestra ocupa el panel y la información va abajo. Los PDF se renderizan al tamaño exacto en píxeles con que se ven (nítidos) y se pasan de página; los archivos comprimidos se muestran como árbol. Panel derecho redimensionable + *Vista rápida* con Espacio. Miniaturas de imágenes, PDF, carátulas y vídeos. |
 | Dos paneles | ✅ | F3 o el botón; cada panel con sus pestañas; Tab cambia de panel; *Copiar/Mover al otro panel*. |
@@ -37,6 +38,9 @@ servidor real · ⏳ fase siguiente.
 | Búsqueda y filtros | ✅ | Escribir filtra la carpeta al instante y, tras una pausa, busca en todas las subcarpetas (asíncrona: varios hilos recorren las carpetas en paralelo con `read_dir`, sin `stat` salvo para los candidatos; resultados por lotes; 97 000 entradas en < 1 s en un PC). Filtros: nombre o contenido (texto, código y documentos de oficina), tipo, fecha de modificación, tamaño. Comodines `*` y `?`, sin distinguir mayúsculas ni acentos. |
 | Arrastrar y soltar | ✅ | Entre paneles, sobre carpetas, pestañas, migas de pan, la barra lateral y la papelera. Mismo disco = mover, otro = copiar; Ctrl copia, Mayús mueve. Desde otras apps (DeX, pantalla dividida): se copian a la carpeta abierta. Selección por rectángulo. |
 | Compresión | ✅ | Ver [compression.md](compression.md): ZIP y 7z (con contraseña AES-256), TAR(.gz/.bz2/.xz/.zst), .zst; RAR (extraer, con contraseña) solo en los APK de GitHub (*feature* `rar`). |
+| Arrastrar a otras apps | 🟡 | Un arrastre de archivos que sale de la ventana pasa a ser un arrastre del sistema (Android): se pueden soltar en Mis archivos, el correo, un chat… Solo archivos locales. Si vuelven a soltarse en DexFiles se copian los originales. |
+| Portapapeles entre apps | 🟡 | Copiar/cortar pone los archivos en el portapapeles de Android (como archivos, no solo rutas); pegar en DexFiles toma primero los archivos que otra app haya copiado. |
+| Renombrado por lotes | ✅ | F2 o *Renombrar N elementos…* con varios seleccionados: reemplazar texto, añadir delante/detrás, numerar (`#` donde va el número), mayúsculas/minúsculas; vista previa con los nombres que chocan en rojo; se pueden intercambiar nombres entre ellos. |
 | Compartir | 🟡 | *Compartir…* (hoja de compartir de Android, varias apps) y *Enviar por correo* (solo apps de correo, como adjuntos). Los archivos de servidores se descargan antes. |
 
 ### 3. Visualización y personalización
@@ -47,6 +51,7 @@ servidor real · ⏳ fase siguiente.
 | Ordenar | ✅ | Nombre (orden natural: «2» antes de «10»), fecha, tipo, tamaño (las carpetas por su contenido), estado (solo lectura/oculto/enlace); ascendente/descendente; carpetas primero. |
 | Tamaño de carpetas | ✅ | Calculado en segundo plano (dos hilos, recorrido de abajo arriba que guarda el de cada subcarpeta), en caché y recalculado cuando la app cambia algo dentro. En las vistas, la vista previa y la suma de la selección. Solo carpetas locales. |
 | Aplicaciones predeterminadas | ✅ escritorio · 🟡 Android | Propias de DexFiles, no del sistema: *Abrir con…* muestra las apps (con iconos en Android) y «abrir siempre .ext con esta app»; *Ajustes ▸ Aplicaciones predeterminadas* las lista, cambia, quita o añade por extensión. |
+| Etiquetas de color | ✅ | Siete colores en el menú contextual (puntos en la esquina del icono); cada color en la barra lateral lista lo que lo lleva, esté donde esté; soltar archivos sobre un color los etiqueta. Siguen al archivo al renombrarlo o moverlo desde DexFiles. |
 | Ocultos | ✅ | Ctrl+H o ajustes (archivos con punto y atributos ocultos/sistema de SMB). |
 | Extensiones | ✅ | Ajuste *Mostrar extensiones*. Con ellas ocultas, renombrar solo cambia el nombre; con ellas visibles, se preselecciona el nombre sin la extensión y se avisa si cambia. |
 | Configuración de inicio | ✅ | Carpeta de inicio, Descargas, una carpeta concreta o las pestañas de la última vez. |
@@ -60,7 +65,7 @@ teclado para saltar a un nombre, vigilancia de cambios en la carpeta abierta.
 | Fase | Contenido |
 |---|---|
 | 2 ✅ | Memoria de vista por carpeta, columnas redimensionables, tamaño de carpetas, búsqueda paralela mientras se escribe, apps predeterminadas propias, PDF, audio y vídeo, RAR (*feature*), .zst, contraseñas en archivos, claves SSH y «confiar en la nueva clave» de SFTP. Pendiente de la fase 2: comprimir/extraer directamente en servidores (ahora se hace en local) |
-| 3 | Arrastrar *desde* DexFiles a otras apps (`startDragAndDrop`), portapapeles de archivos entre apps, etiquetas de color, renombrado por lotes |
+| 3 ✅ | Arrastrar *desde* DexFiles a otras apps (`startDragAndDrop`), portapapeles de archivos entre apps, etiquetas de color, renombrado por lotes; Espacio abre el visor que toca y vista rápida a pantalla completa |
 | 4 | Release firmado, F-Droid/Obtainium (como DexPdfCraft fase 7), integración en craft-android de lo que sirva a otras apps (volúmenes, abrir con, compartir) |
 
 ## Qué se ha probado

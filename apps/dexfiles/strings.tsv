@@ -288,3 +288,35 @@ preview_video_device	Video frames are shown on Android (the system decodes them)
 play	Play	Reproducir
 play_all	Play all	Reproducir todo
 player_android_only	Playback is available on Android	La reproducción está disponible en Android
+drag_out_local_only	Only files on this device can be dragged to other apps	Solo se pueden arrastrar a otras apps archivos de este dispositivo
+tags	Tags	Etiquetas
+tag_red	Red	Rojo
+tag_orange	Orange	Naranja
+tag_yellow	Yellow	Amarillo
+tag_green	Green	Verde
+tag_blue	Blue	Azul
+tag_purple	Purple	Morado
+tag_gray	Gray	Gris
+rename_n	Rename {} items…	Renombrar {} elementos…
+rename_replace	Replace text	Reemplazar texto
+rename_add	Add text	Añadir texto
+rename_number	Number	Numerar
+rename_case	Capitals	Mayúsculas
+rename_find	Find	Buscar
+rename_replace_with	Replace with	Reemplazar por
+rename_match_case	Match case	Distinguir mayúsculas
+rename_with_ext	Also in the extension	También en la extensión
+rename_prefix	Before the name	Antes del nombre
+rename_suffix	After the name	Después del nombre
+rename_base	Name	Nombre
+rename_base_hint	Empty: the current name; # where the number goes	Vacío: el nombre actual; # donde va el número
+rename_start	Start at	Empezar en
+rename_digits	Digits	Cifras
+case_lower	lowercase	minúsculas
+case_upper	UPPERCASE	MAYÚSCULAS
+case_title	Title Case	Cada Palabra
+case_sentence	Sentence case	Solo la primera
+rename_duplicate	Two items would get this name	Dos elementos tendrían este nombre
+rename_taken	The folder already has an item with this name	Ya hay un elemento con este nombre en la carpeta
+rename_problems	{} names can't be used	{} nombres no se pueden usar
+rename_changes	{} names change	Cambian {} nombres

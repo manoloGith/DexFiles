@@ -19,6 +19,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             section(app, ui, "favorites", favorites);
             section(app, ui, "devices", devices);
             section(app, ui, "network", network);
+            section(app, ui, "tags", tags);
             ui.add_space(6.0);
             let here = app.tab(app.active_pane).location().clone();
             let label = if app.trash_count > 0 {
@@ -441,5 +442,62 @@ fn network(app: &mut App, ui: &mut Ui) {
     let resp = row(app, ui, 0, Sym::Plus, t("connect_server"), false, None);
     if resp.clicked() {
         app.actions.push(Action::EditServer(None));
+    }
+}
+
+/// The colour tags: each lists what carries it; dropping items on one tags them.
+fn tags(app: &mut App, ui: &mut Ui) {
+    let pal = theme::palette(app.dark);
+    let here = app.tab(app.active_pane).location().clone();
+    let dragging = egui::DragAndDrop::has_payload_of_type::<DragPayload>(ui.ctx());
+    let mut counts = [0usize; crate::tags::COUNT as usize];
+    for v in app.settings.tags.values() {
+        for &c in v {
+            if let Some(n) = counts.get_mut(c as usize) {
+                *n += 1;
+            }
+        }
+    }
+    for c in 0..crate::tags::COUNT {
+        let loc = Location::Tag(c);
+        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
+        if here == loc {
+            ui.painter()
+                .rect_filled(rect, CornerRadius::same(6), pal.selection_inactive);
+        } else if resp.hovered() || (dragging && resp.contains_pointer()) {
+            ui.painter().rect_filled(
+                rect,
+                CornerRadius::same(6),
+                if dragging { pal.drop } else { pal.hover },
+            );
+        }
+        let dot = pos2(rect.left() + 6.0 + 14.0 + 9.0, rect.center().y);
+        ui.painter().circle_filled(dot, 6.0, crate::tags::color(c));
+        ui.painter().text(
+            pos2(dot.x + 17.0, rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            crate::tags::name(c),
+            FontId::proportional(13.5),
+            ui.visuals().text_color(),
+        );
+        if counts[c as usize] > 0 {
+            ui.painter().text(
+                pos2(rect.right() - 10.0, rect.center().y),
+                egui::Align2::RIGHT_CENTER,
+                counts[c as usize].to_string(),
+                FontId::proportional(11.5),
+                pal.weak,
+            );
+        }
+        app.drop_targets.push(DropTarget {
+            rect,
+            dest: loc.clone(),
+            priority: 3,
+            trash: false,
+        });
+        if resp.clicked() {
+            let p = app.active_pane;
+            app.actions.push(Action::Navigate(p, loc));
+        }
     }
 }

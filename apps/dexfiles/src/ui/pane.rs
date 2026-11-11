@@ -281,7 +281,7 @@ impl Tab {
 pub fn location_title(l: &Location) -> String {
     match l {
         Location::Trash => crate::i18n::t("trash").to_owned(),
-        Location::Archive { .. } => l.name(),
+        Location::Archive { .. } | Location::Tag(_) => l.name(),
         Location::Local(p) => {
             if *p == crate::platform::home() {
                 return crate::i18n::t("home").to_owned();

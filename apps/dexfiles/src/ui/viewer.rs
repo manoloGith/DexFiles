@@ -310,7 +310,10 @@ pub fn nav_buttons(
     let prev = round_button(
         ui,
         painter,
-        Rect::from_center_size(pos2(screen.left() + 34.0, screen.center().y), Vec2::splat(44.0)),
+        Rect::from_center_size(
+            pos2(screen.left() + 34.0, screen.center().y),
+            Vec2::splat(44.0),
+        ),
         Sym::Back,
         has_prev,
         "overlay-prev",
@@ -318,7 +321,10 @@ pub fn nav_buttons(
     let next = round_button(
         ui,
         painter,
-        Rect::from_center_size(pos2(screen.right() - 34.0, screen.center().y), Vec2::splat(44.0)),
+        Rect::from_center_size(
+            pos2(screen.right() - 34.0, screen.center().y),
+            Vec2::splat(44.0),
+        ),
         Sym::Forward,
         has_next,
         "overlay-next",
@@ -326,7 +332,10 @@ pub fn nav_buttons(
     let close = round_button(
         ui,
         painter,
-        Rect::from_center_size(pos2(screen.right() - 30.0, screen.top() + 30.0), Vec2::splat(36.0)),
+        Rect::from_center_size(
+            pos2(screen.right() - 30.0, screen.top() + 30.0),
+            Vec2::splat(36.0),
+        ),
         Sym::Close,
         true,
         "overlay-close",

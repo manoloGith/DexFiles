@@ -80,10 +80,8 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             let backdrop = ui.allocate_rect(screen, Sense::click());
             let painter = ui.painter().clone();
             painter.rect_filled(screen, 0, Color32::from_black_alpha(225));
-            let area = Rect::from_min_max(
-                screen.min + vec2(88.0, 56.0),
-                screen.max - vec2(88.0, 48.0),
-            );
+            let area =
+                Rect::from_min_max(screen.min + vec2(88.0, 56.0), screen.max - vec2(88.0, 48.0));
             // Pictures sit on the backdrop; text, tables and lists on a card.
             let picture = matches!(
                 app.preview.content,

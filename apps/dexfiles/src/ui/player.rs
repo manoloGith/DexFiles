@@ -449,21 +449,24 @@ fn list(p: &Player, ui: &mut Ui, lr: Rect, colors: ListColors, events: &mut Vec<
                     ui.painter()
                         .rect_filled(r, CornerRadius::same(4), colors.current);
                 } else if resp.hovered() {
-                    ui.painter().rect_filled(r, CornerRadius::same(4), colors.hover);
+                    ui.painter()
+                        .rect_filled(r, CornerRadius::same(4), colors.hover);
                 }
                 let color = if i == p.index {
                     theme::ACCENT
                 } else {
                     colors.text
                 };
-                let g = ui
-                    .painter()
-                    .layout_no_wrap(e.name.clone(), FontId::proportional(12.0), color);
-                ui.painter().with_clip_rect(r.shrink2(vec2(6.0, 0.0))).galley(
-                    pos2(r.left() + 8.0, r.center().y - g.size().y / 2.0),
-                    g,
-                    color,
-                );
+                let g =
+                    ui.painter()
+                        .layout_no_wrap(e.name.clone(), FontId::proportional(12.0), color);
+                ui.painter()
+                    .with_clip_rect(r.shrink2(vec2(6.0, 0.0)))
+                    .galley(
+                        pos2(r.left() + 8.0, r.center().y - g.size().y / 2.0),
+                        g,
+                        color,
+                    );
                 if resp.clicked() {
                     events.push(Event::Jump(i));
                 }
@@ -471,6 +474,7 @@ fn list(p: &Player, ui: &mut Ui, lr: Rect, colors: ListColors, events: &mut Vec<
         });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn controls(
     p: &Player,
     ui: &mut Ui,

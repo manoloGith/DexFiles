@@ -219,6 +219,42 @@ pub fn media_changed(paths: &[PathBuf]) {
     let _ = paths;
 }
 
+/// Whether files can be handed to other apps by dragging them out of the window.
+pub const DRAG_OUT: bool = cfg!(target_os = "android");
+
+/// Copied or cut items on the system clipboard: local files as files other apps can paste
+/// (Android), and as their paths in text (anything else, or on a desktop).
+pub fn clip_files(ctx: &egui::Context, local: &[PathBuf], text: String) {
+    #[cfg(target_os = "android")]
+    if !local.is_empty() {
+        let _ = ctx;
+        let _ = text;
+        crate::android::clip_set(local);
+        return;
+    }
+    let _ = local;
+    copy_text(ctx, text);
+}
+
+/// Files another app put on the system clipboard, copied to the cache to paste (Android only);
+/// `None` when the clipboard holds DexFiles' own copy or no files. Blocking: call off the UI.
+pub fn clipboard_import() -> Option<Vec<PathBuf>> {
+    #[cfg(target_os = "android")]
+    {
+        crate::android::clip_import()
+    }
+    #[cfg(not(target_os = "android"))]
+    None
+}
+
+/// Start a system drag of these local files (Android).
+pub fn drag_out(paths: &[PathBuf]) {
+    #[cfg(target_os = "android")]
+    crate::android::drag_out(paths);
+    #[cfg(not(target_os = "android"))]
+    let _ = paths;
+}
+
 /// Put text on the system clipboard.
 pub fn copy_text(ctx: &egui::Context, text: String) {
     #[cfg(target_os = "android")]

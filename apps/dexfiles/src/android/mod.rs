@@ -227,3 +227,36 @@ pub fn video_frame(path: &Path, max: u32) -> Option<crate::preview::MediaInfo> {
 pub fn player(op: &str, args: serde_json::Value) -> serde_json::Value {
     call(&format!("player_{op}"), args)
 }
+
+fn strings(paths: &[PathBuf]) -> Vec<String> {
+    paths
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
+}
+
+/// Copied local files on the system clipboard (as content URIs), for other apps to paste.
+pub fn clip_set(paths: &[PathBuf]) {
+    call("clip_set", json!({ "paths": strings(paths) }));
+}
+
+/// What a paste takes from the system clipboard: `None` when it holds DexFiles' own copy (or no
+/// files), otherwise the files another app put there, copied into the cache.
+pub fn clip_import() -> Option<Vec<PathBuf>> {
+    let answer = call("clip_import", json!({}));
+    if answer["ours"].as_bool() == Some(true) {
+        return None;
+    }
+    let paths: Vec<PathBuf> = answer["paths"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| p.as_str().map(PathBuf::from))
+        .collect();
+    (!paths.is_empty()).then_some(paths)
+}
+
+/// Hand a drag of local files to the system, for other apps to take.
+pub fn drag_out(paths: &[PathBuf]) {
+    call("drag_out", json!({ "paths": strings(paths) }));
+}
