@@ -19,6 +19,7 @@ jobs:
       - name: Rust (rust-toolchain.toml) and cargo-ndk
         run: |
           rustup show active-toolchain || rustup toolchain install
+          rustup component add clippy
           cargo install cargo-ndk --version 4.1.2 --locked
 
       - uses: actions/setup-java@v4
