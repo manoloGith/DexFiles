@@ -1,0 +1,4 @@
+/target
+/.build-inputs
+*.keystore
+local.properties

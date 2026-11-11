@@ -1,0 +1,3 @@
+[submodule "craft-android"]
+	path = craft-android
+	url = https://github.com/manoloGith/craft-android

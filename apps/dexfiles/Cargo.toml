@@ -1,0 +1,66 @@
+[package]
+name = "dexfiles"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+description = "DexFiles: a modern file manager for Samsung DeX and Android desktop windowing (egui)"
+
+[lib]
+name = "dexfiles"
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "dexfiles-desktop"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+
+[features]
+default = ["network"]
+desktop = ["eframe/x11", "eframe/wayland", "dep:open"]
+# FTP/FTPS, SFTP, SMB and WebDAV locations.
+network = ["dep:suppaftp", "dep:ureq", "dep:russh", "dep:russh-sftp", "dep:tokio", "dep:smb", "dep:rustls", "dep:webpki-roots", "dep:time"]
+
+[dependencies]
+egui = { version = "0.37", features = ["default_fonts", "serde"] }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "wgpu", "glow", "accesskit", "persistence"] }
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+fs4 = "1"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "ico", "tiff"] }
+zip = { version = "9", default-features = false, features = ["deflate", "time"] }
+sevenz-rust2 = { version = "0.25", default-features = false, features = ["compress", "util"] }
+tar = { version = "0.4", default-features = false }
+flate2 = "1"
+bzip2 = "0.6"
+lzma-rust2 = { version = "0.25", features = ["xz"] }
+calamine = "0.38"
+quick-xml = "0.42"
+craft-android = { path = "../../craft-android/crates/craft-android" }
+
+suppaftp = { version = "12", optional = true, default-features = false, features = ["rustls-ring"] }
+ureq = { version = "3", optional = true }
+russh = { version = "0.54", optional = true, default-features = false, features = ["flate2", "ring", "rsa"] }
+russh-sftp = { version = "2", optional = true }
+tokio = { version = "1", optional = true, features = ["rt-multi-thread", "sync", "io-util", "time", "net"] }
+smb = { version = "0.12", optional = true, default-features = false, features = ["sign", "encrypt", "multi_threaded", "netbios-transport"] }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = { version = "1", optional = true }
+time = { version = "0.3", optional = true }
+
+open = { version = "5", optional = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+eframe = { version = "0.37", default-features = false, features = ["android-game-activity"] }
+jni = "0.22.4"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

@@ -1,0 +1,4 @@
+# The Rust release every build uses, with the Android targets the APK ships.
+[toolchain]
+channel = "1.97.0"
+targets = ["aarch64-linux-android", "x86_64-linux-android"]
