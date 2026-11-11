@@ -1,0 +1,1 @@
+First version: a desktop-style file manager for DeX, with network places, archives, previews, a media player, tags and batch rename.

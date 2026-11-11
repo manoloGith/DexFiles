@@ -1,0 +1,23 @@
+<p><b>DexFiles</b> is a file manager in the spirit of a modern desktop one, made for <b>Samsung DeX</b> and Android's desktop windows, with mouse and keyboard. It works on tablets and phones too.</p>
+<p><b>Browse</b></p>
+<ul>
+<li>Sidebar with favourites, every storage volume as a folder tree, network places, colour tags and the trash</li>
+<li>Tabs, two panes, back/forward (also the mouse's side buttons), clickable path bar</li>
+<li>Six views (icons, list, details, content…); each folder remembers its view and order; resizable columns; folder sizes</li>
+<li>Network: FTP/FTPS, SFTP (password or key), SMB and WebDAV (Nextcloud…)</li>
+<li>ZIP, 7z, TAR and RAR archives open like folders</li>
+</ul>
+<p><b>Work with files</b></p>
+<ul>
+<li>Copy, move, rename and delete in the background, with progress and questions on name conflicts; a trash on every volume</li>
+<li>Drag and drop between panes, to and from other apps; files on the clipboard shared with other apps</li>
+<li>Search as you type in every subfolder, by name or content, type, date and size</li>
+<li>Compress and extract ZIP and 7z (with AES-256 passwords), TAR.GZ/BZ2/XZ/ZST; batch rename; colour tags</li>
+<li>Share, send by mail, and DexFiles' own default apps per file type</li>
+</ul>
+<p><b>Look</b></p>
+<ul>
+<li>Preview panel: images, PDF, text and code, office documents, spreadsheets, audio with its cover art, video, archive trees</li>
+<li>Space opens the image viewer, the full-window audio and video player or a full-window quick look</li>
+</ul>
+<p>No account, no ads, no telemetry. MIT or Apache-2.0. RAR extraction (UnRAR) is only in the APKs published on GitHub.</p>

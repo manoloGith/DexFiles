@@ -1,0 +1,1 @@
+A modern desktop-style file manager for Samsung DeX, tablets and phones

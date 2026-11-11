@@ -67,7 +67,8 @@ teclado para saltar a un nombre, vigilancia de cambios en la carpeta abierta.
 |---|---|
 | 2 ✅ | Memoria de vista por carpeta, columnas redimensionables, tamaño de carpetas, búsqueda paralela mientras se escribe, apps predeterminadas propias, PDF, audio y vídeo, RAR (*feature*), .zst, contraseñas en archivos, claves SSH y «confiar en la nueva clave» de SFTP. Pendiente de la fase 2: comprimir/extraer directamente en servidores (ahora se hace en local) |
 | 3 ✅ | Arrastrar *desde* DexFiles a otras apps (`startDragAndDrop`), portapapeles de archivos entre apps, etiquetas de color, renombrado por lotes; Espacio abre el visor que toca y vista rápida a pantalla completa |
-| 4 | Release firmado, F-Droid/Obtainium (como DexPdfCraft fase 7), integración en craft-android de lo que sirva a otras apps (volúmenes, abrir con, compartir) |
+| 4 ✅ | Release en GitHub (workflow `release.yml`, firma con los secretos `DEXFILES_*`; ver [releasing.md](releasing.md)), Obtainium, metadatos de F-Droid y borrador de `fdroiddata` ([fdroid.md](fdroid.md)), apps Dex ([apps-dex.md](apps-dex.md)) |
+| 5 | Integrar en craft-android lo que sirva a otras apps (volúmenes, abrir con, compartir, portapapeles de archivos, arrastrar hacia fuera); enviar a F-Droid |
 
 ## Qué se ha probado
 

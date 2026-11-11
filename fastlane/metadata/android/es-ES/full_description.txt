@@ -1,0 +1,23 @@
+<p><b>DexFiles</b> es un explorador de archivos al estilo de los de escritorio modernos, hecho para <b>Samsung DeX</b> y las ventanas de escritorio de Android, con ratón y teclado. También funciona en tabletas y móviles.</p>
+<p><b>Navegar</b></p>
+<ul>
+<li>Barra lateral con favoritos, cada almacenamiento como árbol de carpetas, ubicaciones de red, etiquetas de color y papelera</li>
+<li>Pestañas, dos paneles, atrás/adelante (también con los botones laterales del ratón), barra de ruta clicable</li>
+<li>Seis vistas (iconos, lista, detalles, contenido…); cada carpeta recuerda su vista y su orden; columnas ajustables; tamaño de carpetas</li>
+<li>Red: FTP/FTPS, SFTP (contraseña o clave), SMB y WebDAV (Nextcloud…)</li>
+<li>Los archivos ZIP, 7z, TAR y RAR se abren como carpetas</li>
+</ul>
+<p><b>Trabajar con archivos</b></p>
+<ul>
+<li>Copiar, mover, renombrar y eliminar en segundo plano, con progreso y preguntas ante nombres repetidos; papelera en cada almacenamiento</li>
+<li>Arrastrar y soltar entre paneles, hacia y desde otras apps; portapapeles de archivos compartido con otras apps</li>
+<li>Búsqueda mientras escribes en todas las subcarpetas, por nombre o contenido, tipo, fecha y tamaño</li>
+<li>Comprimir y extraer ZIP y 7z (con contraseña AES-256), TAR.GZ/BZ2/XZ/ZST; renombrado por lotes; etiquetas de color</li>
+<li>Compartir, enviar por correo y aplicaciones predeterminadas propias por tipo de archivo</li>
+</ul>
+<p><b>Ver</b></p>
+<ul>
+<li>Panel de vista previa: imágenes, PDF, texto y código, documentos de oficina, hojas de cálculo, audio con su carátula, vídeo, árbol de archivos comprimidos</li>
+<li>La barra espaciadora abre el visor de imágenes, el reproductor de audio y vídeo a pantalla completa o la vista rápida a toda la ventana</li>
+</ul>
+<p>Sin cuenta, sin anuncios y sin telemetría. Licencia MIT o Apache-2.0. La extracción de RAR (UnRAR) solo está en los APK publicados en GitHub.</p>

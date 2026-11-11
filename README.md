@@ -22,6 +22,19 @@ cierre y reapertura fiables, y un informe de diagnóstico que se copia sin adb.
 - **Aplicaciones predeterminadas propias** (no las de Android), modificables en Ajustes.
 - **Vista previa**: imágenes, PDF, documentos, hojas de cálculo, audio, vídeo y archivos comprimidos.
 
+- **Visores**: la barra espaciadora abre el visor de imágenes, el reproductor de audio y vídeo a
+  pantalla completa o la vista rápida; los archivos comprimidos se abren como carpetas.
+- **Organización**: etiquetas de color, renombrado por lotes, arrastrar y portapapeles de archivos
+  compartidos con otras apps.
+
+## Descargar
+
+El APK firmado de cada versión está en
+[Releases](https://github.com/manoloGith/DexFiles/releases) (arm64, Android 10 o posterior).
+[Obtainium](https://github.com/ImranR98/Obtainium) puede seguir el repositorio para instalar las
+actualizaciones. Publicar una versión: [docs/releasing.md](docs/releasing.md); F-Droid:
+[docs/fdroid.md](docs/fdroid.md).
+
 Estado y plan por fases: [docs/plan.md](docs/plan.md). Compresión (librerías y RAR):
 [docs/compression.md](docs/compression.md). Cómo probarlo: [docs/testing.md](docs/testing.md).
 

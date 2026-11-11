@@ -1,0 +1,1 @@
+Primera versión: un explorador de archivos de escritorio para DeX, con red, archivos comprimidos, vistas previas, reproductor, etiquetas y renombrado por lotes.
