@@ -285,3 +285,6 @@ media_bitrate	Bitrate	Tasa de bits
 media_sample_rate	Sample rate	Frecuencia de muestreo
 media_resolution	Resolution	Resolución
 preview_video_device	Video frames are shown on Android (the system decodes them).	Los fotogramas de vídeo se muestran en Android (los decodifica el sistema).
+play	Play	Reproducir
+play_all	Play all	Reproducir todo
+player_android_only	Playback is available on Android	La reproducción está disponible en Android

@@ -55,7 +55,9 @@ fn pthread_stub() {
     if !(android && rar) {
         return;
     }
-    let Ok(dir) = std::env::var("OUT_DIR") else { return };
+    let Ok(dir) = std::env::var("OUT_DIR") else {
+        return;
+    };
     let dir = std::path::PathBuf::from(dir).join("pthread-stub");
     let _ = std::fs::create_dir_all(&dir);
     let _ = std::fs::write(dir.join("libpthread.a"), b"!<arch>\n");

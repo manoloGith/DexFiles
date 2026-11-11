@@ -29,6 +29,8 @@ import java.io.File
  * with another app, sharing and mailing files, and telling the media index about new files.
  */
 class MainActivity : CraftActivity() {
+    private val player by lazy { Player(this) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!isFinishing) nativeRegisterFiles(this)
@@ -50,7 +52,7 @@ class MainActivity : CraftActivity() {
             "share" -> share(args.getJSONArray("paths"), args.optBoolean("email"))
             "media_scan" -> { mediaScan(args.getJSONArray("paths")); "{}" }
             "video_frame" -> videoFrame(File(args.getString("path")), args.optInt("max", 512))
-            else -> { Log.w(TAG, "files: unknown operation $op"); "{}" }
+            else -> if (op.startsWith("player_")) player.handle(op.removePrefix("player_"), args) else { Log.w(TAG, "files: unknown operation $op"); "{}" }
         }
     } catch (e: Exception) {
         Log.w(TAG, "files: $op failed", e)
@@ -240,6 +242,11 @@ class MainActivity : CraftActivity() {
     private fun mediaScan(paths: JSONArray) {
         val list = Array(paths.length()) { paths.getString(it) }
         MediaScannerConnection.scanFile(applicationContext, list, null, null)
+    }
+
+    override fun onDestroy() {
+        player.release()
+        super.onDestroy()
     }
 
     /** This activity, for the library's file operations (a global reference on the Rust side). */

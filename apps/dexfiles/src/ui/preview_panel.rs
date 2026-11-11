@@ -1,10 +1,16 @@
-//! The preview panel on the right: what is selected, its details, and its content (an image,
-//! text, a document's text, a table, an archive's list).
+//! The preview panel on the right. What is shown fills the panel from the top; what is known
+//! about it sits at the bottom. The player docks under the information (a third of the panel)
+//! while it plays a file other than the one previewed, and fills the picture area when it plays
+//! the one previewed.
 
-use egui::{RichText, Ui, Vec2};
+use std::collections::BTreeMap;
+
+use egui::{Align2, Color32, FontId, Rect, RichText, Sense, Ui, Vec2, pos2, vec2};
 
 use super::app::{Action, App};
+use super::icons::{self, Sym};
 use super::theme;
+use crate::archive::ArchiveItem;
 use crate::fileinfo::{self, Category};
 use crate::i18n::{t, tf};
 use crate::preview::Content;
@@ -13,192 +19,318 @@ use crate::vfs::Entry;
 pub fn show(app: &mut App, ui: &mut Ui) {
     let p = app.active_pane;
     let sel = app.tab(p).selected_entries();
-    let pal = theme::palette(app.dark);
-    egui::ScrollArea::vertical()
-        .auto_shrink(false)
-        .show(ui, |ui| match sel.len() {
-            0 => {
-                let tab = app.tab(p);
-                let title = tab.title();
-                let n = tab.visible.len();
-                ui.vertical_centered(|ui| {
-                    ui.add_space(20.0);
-                    let (r, _) = ui.allocate_exact_size(Vec2::splat(96.0), egui::Sense::hover());
-                    super::icons::folder(ui.painter(), r, Category::Folder.color());
-                    ui.add_space(8.0);
-                    ui.label(RichText::new(title).strong().size(16.0));
-                    ui.label(RichText::new(tf("n_items", n)).color(pal.weak));
-                });
-            }
-            1 => {
-                let e = sel[0].clone();
-                header(app, ui, &e);
-                ui.add_space(8.0);
-                content(app, ui, &e, false);
-                ui.add_space(10.0);
-                details(app, ui, &e);
-            }
-            n => {
-                let size: u64 = sel.iter().filter(|e| !e.is_dir()).map(|e| e.size).sum();
-                ui.vertical_centered(|ui| {
-                    ui.add_space(20.0);
-                    let (r, _) = ui.allocate_exact_size(Vec2::splat(96.0), egui::Sense::hover());
-                    for (i, e) in sel.iter().take(3).enumerate().rev() {
-                        let off = i as f32 * 8.0;
-                        let rr = egui::Rect::from_min_size(
-                            r.min + egui::vec2(off, -off + 16.0),
-                            Vec2::splat(80.0),
-                        );
-                        super::icons::file_icon(
-                            ui.painter(),
-                            rr,
-                            Category::of(&e.ext, e.is_dir()),
-                            &e.ext,
-                            app.dark,
-                        );
-                    }
-                    ui.add_space(8.0);
-                    ui.label(RichText::new(tf("n_selected", n)).strong().size(16.0));
-                    if size > 0 {
-                        ui.label(RichText::new(fileinfo::format_size(size)).color(pal.weak));
-                    }
-                });
-            }
+    let single = (sel.len() == 1).then(|| sel[0].clone());
+    let playing_this = single.as_ref().is_some_and(|e| {
+        app.player
+            .as_ref()
+            .and_then(|pl| pl.current())
+            .is_some_and(|c| c.location == e.location)
+    });
+    let height = ui.available_height();
+    if app.player.is_some() && !playing_this {
+        egui::Panel::bottom("pv-player")
+            .exact_size((height / 3.0).max(150.0))
+            .frame(egui::Frame::NONE.inner_margin(egui::Margin {
+                left: 0,
+                right: 0,
+                top: 10,
+                bottom: 0,
+            }))
+            .show_separator_line(false)
+            .show(ui, |ui| super::player::show(app, ui));
+    }
+    egui::Panel::bottom("pv-info")
+        .frame(egui::Frame::NONE.inner_margin(egui::Margin {
+            left: 0,
+            right: 0,
+            top: 10,
+            bottom: 0,
+        }))
+        .show_separator_line(false)
+        .show(ui, |ui| {
+            // Sized by its content (a scroll area here would keep the panel from growing).
+            info(app, ui, &sel);
         });
-}
-
-fn header(app: &mut App, ui: &mut Ui, e: &Entry) {
-    let pal = theme::palette(app.dark);
-    ui.vertical_centered(|ui| {
-        let has_image = matches!(
-            app.preview.content,
-            Some(
-                Content::Image { .. } | Content::Pdf { .. } | Content::Media { image: Some(_), .. }
-            )
-        ) && app.preview.texture.is_some();
-        if !has_image {
-            let (r, _) = ui.allocate_exact_size(Vec2::splat(96.0), egui::Sense::hover());
-            super::view::entry_icon(app, ui, r, e, true);
+    egui::CentralPanel::no_frame().show(ui, |ui| match (&single, sel.len()) {
+        (Some(_), _) if playing_this => super::player::show(app, ui),
+        (Some(e), _) => content(app, ui, e, false),
+        (None, 0) => {
+            let r = ui.available_rect_before_wrap();
+            big_icon(ui, r, |p, rr| {
+                icons::folder(p, rr, Category::Folder.color())
+            });
         }
-        ui.add(egui::Label::new(RichText::new(&e.name).strong().size(15.0)).wrap());
-        let mut sub = fileinfo::kind_label(&e.ext, e.is_dir());
-        let size = super::view::size_text(app, e);
-        if size != "—" {
-            sub.push_str(&format!(" · {size}"));
+        (None, _) => {
+            let r = ui.available_rect_before_wrap();
+            let side = (r.width().min(r.height()) * 0.45).clamp(48.0, 160.0);
+            let base = Rect::from_center_size(r.center(), Vec2::splat(side));
+            for (i, e) in sel.iter().take(3).enumerate().rev() {
+                let off = i as f32 * side * 0.1;
+                let rr = base.translate(vec2(off, -off));
+                icons::file_icon(
+                    ui.painter(),
+                    rr,
+                    Category::of(&e.ext, e.is_dir()),
+                    &e.ext,
+                    app.dark,
+                );
+            }
         }
-        if let Some(s) = app.dir_size(e) {
-            sub.push_str(&format!(" · {}", tf("n_items", s.items)));
-        }
-        ui.label(RichText::new(sub).color(pal.weak));
-        ui.horizontal(|ui| {
-            let w = ui.available_width();
-            ui.add_space((w - 200.0).max(0.0) / 2.0);
-            if ui.button(t("open")).clicked() {
-                let p = app.active_pane;
-                app.actions.push(Action::Open(p, e.clone()));
-            }
-            if !e.is_dir() && ui.button(t("share")).clicked() {
-                app.actions
-                    .push(Action::Share(vec![e.location.clone()], false));
-            }
-            if ui.button(t("properties")).clicked() {
-                app.actions.push(Action::Properties(e.clone()));
-            }
-        });
     });
 }
 
-/// The content preview (also the quick look's, `large`).
-pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
+fn big_icon(ui: &Ui, r: Rect, draw: impl FnOnce(&egui::Painter, Rect)) {
+    let side = (r.width().min(r.height()) * 0.5).clamp(48.0, 180.0);
+    draw(
+        ui.painter(),
+        Rect::from_center_size(r.center(), Vec2::splat(side)),
+    );
+}
+
+/// The bottom part: name, kind and size, actions, details.
+fn info(app: &mut App, ui: &mut Ui, sel: &[Entry]) {
     let pal = theme::palette(app.dark);
-    if app.preview.loading || app.preview.content.is_none() {
-        ui.vertical_centered(|ui| ui.add(egui::Spinner::new().size(20.0)));
-        return;
-    }
-    let width = ui.available_width();
-    match &app.preview.content {
-        Some(Content::Media { info, .. }) => {
-            if let Some(tex) = &app.preview.texture {
-                let size = tex.size_vec2();
-                let scale = (width / size.x)
-                    .min(if large { 600.0 } else { 300.0 } / size.y)
-                    .min(2.0);
-                ui.vertical_centered(|ui| {
-                    ui.add(
-                        egui::Image::from_texture(tex)
-                            .fit_to_exact_size(size * scale)
-                            .corner_radius(6),
-                    );
-                });
-                ui.add_space(6.0);
-            }
-            egui::Grid::new(("media", large))
-                .num_columns(2)
-                .spacing([10.0, 4.0])
-                .show(ui, |ui| {
-                    for (k, v) in info {
-                        ui.label(RichText::new(t(k)).color(pal.weak));
-                        ui.add(egui::Label::new(v.as_str()).wrap());
-                        ui.end_row();
+    match sel.len() {
+        0 => {
+            let tab = app.tab(app.active_pane);
+            let (title, n) = (tab.title(), tab.visible.len());
+            ui.vertical_centered(|ui| {
+                ui.label(RichText::new(title).strong().size(15.0));
+                ui.label(RichText::new(tf("n_items", n)).color(pal.weak));
+            });
+        }
+        1 => {
+            let e = sel[0].clone();
+            ui.vertical_centered(|ui| {
+                ui.add(egui::Label::new(RichText::new(&e.name).strong().size(15.0)).wrap());
+                let mut sub = fileinfo::kind_label(&e.ext, e.is_dir());
+                let size = super::view::size_text(app, &e);
+                if size != "—" {
+                    sub.push_str(&format!(" · {size}"));
+                }
+                if let Some(s) = app.dir_size(&e) {
+                    sub.push_str(&format!(" · {}", tf("n_items", s.items)));
+                }
+                ui.label(RichText::new(sub).color(pal.weak));
+                ui.horizontal_wrapped(|ui| {
+                    let p = app.active_pane;
+                    if super::player::playable(&e)
+                        && crate::media::available()
+                        && ui.small_button(t("play")).clicked()
+                    {
+                        app.actions.push(Action::Play(e.clone()));
+                    }
+                    if ui.small_button(t("open")).clicked() {
+                        app.actions.push(Action::Open(p, e.clone()));
+                    }
+                    if !e.is_dir() && ui.small_button(t("share")).clicked() {
+                        app.actions
+                            .push(Action::Share(vec![e.location.clone()], false));
+                    }
+                    if icons::sym_button(ui, Sym::More, false, t("properties")).clicked() {
+                        app.actions.push(Action::Properties(e.clone()));
                     }
                 });
+            });
+            ui.add_space(6.0);
+            details(app, ui, &e);
         }
-        Some(content @ (Content::Image { .. } | Content::Pdf { .. })) => {
-            let caption = match content {
-                Content::Image {
-                    width: w,
-                    height: h,
-                    ..
-                } => format!("{w} × {h} px"),
-                Content::Pdf { pages, .. } => tf("n_pages", pages),
-                _ => String::new(),
+        n => {
+            let size: u64 = sel
+                .iter()
+                .map(|e| {
+                    if e.is_dir() {
+                        app.dir_size(e).map(|s| s.bytes).unwrap_or(0)
+                    } else {
+                        e.size
+                    }
+                })
+                .sum();
+            ui.vertical_centered(|ui| {
+                ui.label(RichText::new(tf("n_selected", n)).strong().size(15.0));
+                if size > 0 {
+                    ui.label(RichText::new(fileinfo::format_size(size)).color(pal.weak));
+                }
+                if sel.iter().filter(|e| super::player::playable(e)).count() > 1
+                    && crate::media::available()
+                    && ui.button(t("play_all")).clicked()
+                    && let Some(first) = sel.iter().find(|e| super::player::playable(e)) {
+                        app.actions.push(Action::Play(first.clone()));
+                    }
+            });
+        }
+    }
+}
+
+/// What a file holds, filling `ui`'s space (also the quick look's, `large`).
+pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
+    let pal = theme::palette(app.dark);
+    let area = ui.available_rect_before_wrap();
+    if app.preview.loading || app.preview.content.is_none() {
+        if e.is_dir() {
+            big_icon(ui, area, |p, r| {
+                icons::folder(p, r, Category::Folder.color())
+            });
+        } else {
+            ui.centered_and_justified(|ui| ui.add(egui::Spinner::new().size(20.0)));
+        }
+        return;
+    }
+    let mut pdf_wanted: Option<(std::path::PathBuf, usize, u32)> = None;
+    let mut play = false;
+    match &app.preview.content {
+        Some(content @ (Content::Image { .. } | Content::Pdf { .. } | Content::Media { .. })) => {
+            let reserve = if matches!(content, Content::Pdf { pages, .. } if *pages > 1)
+                || matches!(content, Content::Image { .. })
+            {
+                22.0
+            } else {
+                0.0
             };
-            if let Some(tex) = &app.preview.texture {
-                let size = tex.size_vec2();
-                let max_h = if large {
-                    ui.available_height().max(300.0)
-                } else {
-                    420.0
-                };
-                let scale = (width / size.x)
-                    .min(max_h / size.y)
-                    .min(if large { 4.0 } else { 1.0 });
-                ui.vertical_centered(|ui| {
-                    ui.add(
-                        egui::Image::from_texture(tex)
-                            .fit_to_exact_size(size * scale)
-                            .corner_radius(6),
+            let pic = Rect::from_min_max(area.min, pos2(area.right(), area.bottom() - reserve));
+            ui.allocate_rect(area, Sense::hover());
+            match &app.preview.texture {
+                Some(tex) => {
+                    let size = tex.size_vec2();
+                    // As big as fits; photos and covers are not blown up past twice their size.
+                    let cap = if matches!(content, Content::Pdf { .. }) {
+                        f32::INFINITY
+                    } else {
+                        2.0
+                    };
+                    let scale = (pic.width() / size.x).min(pic.height() / size.y).min(cap);
+                    let r = Rect::from_center_size(pic.center(), size * scale);
+                    if matches!(content, Content::Pdf { .. }) {
+                        ui.painter().rect_filled(r.expand(1.0), 2, pal.separator);
+                    }
+                    egui::Image::from_texture(tex)
+                        .corner_radius(if matches!(content, Content::Pdf { .. }) {
+                            0
+                        } else {
+                            6
+                        })
+                        .paint_at(ui, r);
+                    if let Content::Pdf { path, page, px, .. } = content {
+                        // Render again at the size it is shown, in device pixels: sharp text.
+                        let want = (r.width().max(r.height()) * ui.ctx().pixels_per_point()).round()
+                            as u32;
+                        let ratio = want as f32 / (*px).max(1) as f32;
+                        if !(0.9..=1.1).contains(&ratio) {
+                            pdf_wanted = Some((path.clone(), *page, want));
+                        }
+                    }
+                    if matches!(content, Content::Media { .. })
+                        && super::player::playable(e)
+                        && crate::media::available()
+                    {
+                        play |= play_button(ui, r);
+                    }
+                }
+                None => {
+                    let cat = Category::of(&e.ext, false);
+                    big_icon(ui, pic, |p, rr| {
+                        icons::file_icon(p, rr, cat, &e.ext, app.dark)
+                    });
+                    if super::player::playable(e) && crate::media::available() {
+                        play |= play_button(ui, pic);
+                    }
+                }
+            }
+            let caption_rect =
+                Rect::from_min_max(pos2(area.left(), area.bottom() - reserve), area.max);
+            match content {
+                Content::Image { width, height, .. } => {
+                    ui.painter().text(
+                        caption_rect.center(),
+                        Align2::CENTER_CENTER,
+                        format!("{width} × {height} px"),
+                        FontId::proportional(11.0),
+                        pal.weak,
                     );
-                    ui.label(RichText::new(caption).color(pal.weak).small());
-                });
+                }
+                Content::Pdf {
+                    pages,
+                    page,
+                    path,
+                    px,
+                    ..
+                } if *pages > 1 => {
+                    let c = caption_rect.center();
+                    ui.painter().text(
+                        c,
+                        Align2::CENTER_CENTER,
+                        format!("{} / {}", page + 1, pages),
+                        FontId::proportional(12.0),
+                        pal.weak,
+                    );
+                    for (dx, s, target, enabled) in [
+                        (-52.0, Sym::Back, page.saturating_sub(1), *page > 0),
+                        (52.0, Sym::Forward, page + 1, page + 1 < *pages),
+                    ] {
+                        let br = Rect::from_center_size(c + vec2(dx, 0.0), Vec2::splat(20.0));
+                        let resp = ui.interact(
+                            br,
+                            ui.scope_id()
+                                .with(("pdf-page", s as u8 as i32 + if large { 100 } else { 0 })),
+                            if enabled {
+                                Sense::click()
+                            } else {
+                                Sense::hover()
+                            },
+                        );
+                        if resp.hovered() && enabled {
+                            ui.painter().circle_filled(br.center(), 10.0, pal.hover);
+                        }
+                        icons::sym(
+                            ui.painter(),
+                            br.shrink(4.0),
+                            s,
+                            if enabled {
+                                ui.visuals().text_color()
+                            } else {
+                                pal.weak.gamma_multiply(0.4)
+                            },
+                        );
+                        if resp.clicked() {
+                            pdf_wanted = Some((path.clone(), target, *px));
+                        }
+                    }
+                }
+                _ => {}
             }
         }
-        Some(Content::Text { text, truncated }) | Some(Content::Document { text, truncated }) => {
+        Some(Content::Text { text, truncated } | Content::Document { text, truncated }) => {
             let mono = matches!(app.preview.content, Some(Content::Text { .. }));
             let shown: String = if large {
                 text.clone()
             } else {
-                text.chars().take(8000).collect()
+                text.chars().take(20_000).collect()
             };
+            let truncated = *truncated;
             egui::Frame::new()
                 .fill(ui.visuals().extreme_bg_color)
                 .corner_radius(6)
                 .inner_margin(8)
                 .show(ui, |ui| {
-                    let rt = if mono {
-                        RichText::new(shown).monospace().size(12.0)
-                    } else {
-                        RichText::new(shown).size(13.0)
-                    };
-                    ui.add(egui::Label::new(rt).wrap());
+                    egui::ScrollArea::vertical()
+                        .id_salt(("pv-text", large))
+                        .auto_shrink(false)
+                        .show(ui, |ui| {
+                            let rt = if mono {
+                                RichText::new(shown).monospace().size(12.0)
+                            } else {
+                                RichText::new(shown).size(13.0)
+                            };
+                            ui.add(egui::Label::new(rt).wrap());
+                            if truncated {
+                                ui.label(
+                                    RichText::new(t("preview_truncated"))
+                                        .small()
+                                        .color(pal.weak),
+                                );
+                            }
+                        });
                 });
-            if *truncated {
-                ui.label(
-                    RichText::new(t("preview_truncated"))
-                        .small()
-                        .color(pal.weak),
-                );
-            }
         }
         Some(Content::Table {
             sheets,
@@ -212,14 +344,16 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
                         .color(pal.weak),
                 );
             }
-            egui::ScrollArea::horizontal()
-                .id_salt(("table", large))
+            let truncated = *truncated;
+            egui::ScrollArea::both()
+                .id_salt(("pv-table", large))
+                .auto_shrink(false)
                 .show(ui, |ui| {
                     egui::Grid::new(("table-grid", large))
                         .striped(true)
                         .spacing([10.0, 3.0])
                         .show(ui, |ui| {
-                            for row in rows.iter().take(if large { 200 } else { 40 }) {
+                            for row in rows.iter().take(if large { 1000 } else { 200 }) {
                                 for cell in row {
                                     let c: String = cell.chars().take(40).collect();
                                     ui.label(RichText::new(c).size(12.0));
@@ -227,79 +361,235 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
                                 ui.end_row();
                             }
                         });
-                });
-            if *truncated {
-                ui.label(
-                    RichText::new(t("preview_truncated"))
-                        .small()
-                        .color(pal.weak),
-                );
-            }
-        }
-        Some(Content::Archive { items, count }) => {
-            ui.label(RichText::new(tf("archive_items", count)).strong());
-            for it in items.iter().take(if large { 500 } else { 60 }) {
-                ui.horizontal(|ui| {
-                    let (r, _) = ui.allocate_exact_size(Vec2::splat(14.0), egui::Sense::hover());
-                    let ext = crate::vfs::extension(&it.name);
-                    super::icons::file_icon(
-                        ui.painter(),
-                        r,
-                        Category::of(&ext, it.is_dir),
-                        &ext,
-                        app.dark,
-                    );
-                    ui.label(RichText::new(&it.name).size(12.0));
-                    if !it.is_dir {
+                    if truncated {
                         ui.label(
-                            RichText::new(fileinfo::format_size(it.size))
-                                .size(11.0)
+                            RichText::new(t("preview_truncated"))
+                                .small()
                                 .color(pal.weak),
                         );
                     }
                 });
-            }
+        }
+        Some(Content::Archive { items, count }) => {
+            ui.label(RichText::new(tf("archive_items", count)).strong());
+            let lines = archive_tree(items);
+            let dark = app.dark;
+            egui::ScrollArea::vertical()
+                .id_salt(("pv-archive", large))
+                .auto_shrink(false)
+                .show_rows(ui, 20.0, lines.len(), |ui, range| {
+                    for line in &lines[range] {
+                        tree_line(ui, line, dark, pal.weak, pal.separator);
+                    }
+                });
         }
         Some(Content::Folder { items, folders }) => {
-            ui.label(
-                RichText::new(format!(
-                    "{} · {}",
-                    tf("n_items", items),
-                    tf("n_folders", folders)
-                ))
-                .color(pal.weak),
+            let r = Rect::from_min_max(area.min, pos2(area.right(), area.bottom() - 24.0));
+            big_icon(ui, r, |p, rr| {
+                icons::folder(p, rr, Category::Folder.color())
+            });
+            ui.painter().text(
+                pos2(area.center().x, area.bottom() - 12.0),
+                Align2::CENTER_CENTER,
+                format!("{} · {}", tf("n_items", items), tf("n_folders", folders)),
+                FontId::proportional(12.0),
+                pal.weak,
             );
         }
         Some(Content::None(key)) => {
-            ui.vertical_centered(|ui| ui.label(RichText::new(t(key)).color(pal.weak)));
+            let galley = ui.painter().layout(
+                t(key).to_owned(),
+                FontId::proportional(12.0),
+                pal.weak,
+                area.width() - 16.0,
+            );
+            let text_h = galley.size().y + 8.0;
+            let r = Rect::from_min_max(area.min, pos2(area.right(), area.bottom() - text_h));
+            let cat = Category::of(&e.ext, e.is_dir());
+            big_icon(ui, r, |p, rr| {
+                icons::file_icon(p, rr, cat, &e.ext, app.dark)
+            });
+            ui.painter().galley(
+                pos2(
+                    area.center().x - galley.size().x / 2.0,
+                    area.bottom() - text_h + 4.0,
+                ),
+                galley,
+                pal.weak,
+            );
+            if super::player::playable(e) && crate::media::available() {
+                play |= play_button(ui, r);
+            }
         }
         Some(Content::Error(err)) => {
             ui.label(RichText::new(err).color(ui.visuals().error_fg_color));
         }
         None => {}
     }
-    let _ = e;
+    if let Some((path, page, px)) = pdf_wanted {
+        app.request_pdf(path, page, px);
+    }
+    if play {
+        app.actions.push(Action::Play(e.clone()));
+    }
+}
+
+/// A round play button in the middle of `r`.
+fn play_button(ui: &mut Ui, r: Rect) -> bool {
+    let br = Rect::from_center_size(r.center(), Vec2::splat(54.0));
+    let resp = ui
+        .interact(br, ui.scope_id().with("pv-play"), Sense::click())
+        .on_hover_text(t("play"));
+    let alpha = if resp.hovered() { 230 } else { 170 };
+    ui.painter()
+        .circle_filled(br.center(), 27.0, Color32::from_black_alpha(alpha));
+    icons::sym(
+        ui.painter(),
+        br.shrink(15.0).translate(vec2(2.0, 0.0)),
+        Sym::Play,
+        Color32::WHITE,
+    );
+    resp.clicked()
+}
+
+/// One line of an archive's contents, shown as a tree: (depth, name, is a folder, size).
+pub struct TreeLine {
+    pub depth: usize,
+    pub name: String,
+    pub is_dir: bool,
+    pub size: u64,
+    /// The last child of its folder (the guide stops here).
+    pub last: bool,
+}
+
+/// An archive's flat list of paths as an indented tree, folders first (folders only implied by
+/// the paths inside them appear too).
+pub fn archive_tree(items: &[ArchiveItem]) -> Vec<TreeLine> {
+    #[derive(Default)]
+    struct Node {
+        children: BTreeMap<String, Node>,
+        is_dir: bool,
+        size: u64,
+    }
+    let mut root = Node::default();
+    for it in items {
+        let parts: Vec<&str> = it
+            .name
+            .split(['/', '\\'])
+            .filter(|p| !p.is_empty() && *p != ".")
+            .collect();
+        let mut node = &mut root;
+        for (i, part) in parts.iter().enumerate() {
+            node = node.children.entry((*part).to_owned()).or_default();
+            if i + 1 < parts.len() {
+                node.is_dir = true;
+            }
+        }
+        if !parts.is_empty() {
+            node.is_dir |= it.is_dir;
+            if !it.is_dir {
+                node.size = it.size;
+            }
+        }
+    }
+    fn walk(node: &Node, depth: usize, out: &mut Vec<TreeLine>) {
+        let mut kids: Vec<(&String, &Node)> = node.children.iter().collect();
+        kids.sort_by(|a, b| {
+            b.1.is_dir
+                .cmp(&a.1.is_dir)
+                .then_with(|| super::pane::natural_cmp(a.0, b.0))
+        });
+        let n = kids.len();
+        for (i, (name, child)) in kids.into_iter().enumerate() {
+            if out.len() >= 5000 {
+                return;
+            }
+            out.push(TreeLine {
+                depth,
+                name: name.clone(),
+                is_dir: child.is_dir,
+                size: child.size,
+                last: i + 1 == n,
+            });
+            walk(child, depth + 1, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(&root, 0, &mut out);
+    out
+}
+
+fn tree_line(ui: &mut Ui, line: &TreeLine, dark: bool, weak: Color32, guide: Color32) {
+    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
+    let indent = 14.0;
+    let x0 = r.left() + 4.0 + line.depth as f32 * indent;
+    // a guide from the parent folder
+    if line.depth > 0 {
+        let gx = x0 - indent / 2.0 - 1.0;
+        let bottom = if line.last { r.center().y } else { r.bottom() };
+        ui.painter().line_segment(
+            [pos2(gx, r.top()), pos2(gx, bottom)],
+            egui::Stroke::new(1.0, guide),
+        );
+        ui.painter().line_segment(
+            [pos2(gx, r.center().y), pos2(x0 - 2.0, r.center().y)],
+            egui::Stroke::new(1.0, guide),
+        );
+    }
+    let ir = Rect::from_min_size(pos2(x0, r.center().y - 7.0), Vec2::splat(14.0));
+    if line.is_dir {
+        icons::folder(ui.painter(), ir, Category::Folder.color());
+    } else {
+        let ext = crate::vfs::extension(&line.name);
+        icons::file_icon(ui.painter(), ir, Category::of(&ext, false), &ext, dark);
+    }
+    let text_x = ir.right() + 6.0;
+    let size = if line.is_dir {
+        String::new()
+    } else {
+        fileinfo::format_size(line.size)
+    };
+    let size_w = if size.is_empty() { 0.0 } else { 60.0 };
+    let g = ui.painter().layout_no_wrap(
+        line.name.clone(),
+        FontId::proportional(12.0),
+        ui.visuals().text_color(),
+    );
+    let clip = Rect::from_min_max(pos2(text_x, r.top()), pos2(r.right() - size_w, r.bottom()));
+    ui.painter()
+        .with_clip_rect(clip.intersect(ui.clip_rect()))
+        .galley(
+            pos2(text_x, r.center().y - g.size().y / 2.0),
+            g,
+            ui.visuals().text_color(),
+        );
+    if !size.is_empty() {
+        ui.painter().text(
+            pos2(r.right() - 4.0, r.center().y),
+            Align2::RIGHT_CENTER,
+            size,
+            FontId::proportional(11.0),
+            weak,
+        );
+    }
 }
 
 fn details(app: &App, ui: &mut Ui, e: &Entry) {
     let pal = theme::palette(app.dark);
-    ui.label(RichText::new(t("information")).strong());
-    ui.separator();
     egui::Grid::new("preview-details")
         .num_columns(2)
-        .spacing([10.0, 4.0])
+        .spacing([10.0, 3.0])
         .show(ui, |ui| {
             let mut line = |k: &str, v: String| {
-                ui.label(RichText::new(t(k)).color(pal.weak));
-                ui.add(egui::Label::new(v).wrap());
+                ui.label(RichText::new(t(k)).color(pal.weak).size(12.5));
+                ui.add(egui::Label::new(RichText::new(v).size(12.5)).wrap());
                 ui.end_row();
             };
-            line("col_kind", fileinfo::kind_label(&e.ext, e.is_dir()));
-            if !e.is_dir() {
-                line(
-                    "col_size",
-                    format!("{} ({} B)", fileinfo::format_size(e.size), e.size),
-                );
+            // What the preview found inside (tags of a song, a video's resolution…).
+            if let Some(Content::Media { info, .. }) = &app.preview.content {
+                for (k, v) in info {
+                    line(k, v.clone());
+                }
             }
             line("col_modified", fileinfo::format_date_long(e.modified));
             if e.created.is_some() {
@@ -325,4 +615,40 @@ fn details(app: &App, ui: &mut Ui, e: &Entry) {
                 line("col_status", attrs.join(", "));
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn archives_as_trees() {
+        let item = |name: &str, is_dir: bool| ArchiveItem {
+            name: name.into(),
+            size: 1,
+            is_dir,
+        };
+        let lines = archive_tree(&[
+            item("b.txt", false),
+            item("docs/a/x.txt", false),
+            item("docs/", true),
+            item("docs/z.txt", false),
+            item("a.txt", false),
+        ]);
+        let shown: Vec<(usize, &str, bool)> = lines
+            .iter()
+            .map(|l| (l.depth, l.name.as_str(), l.is_dir))
+            .collect();
+        assert_eq!(
+            shown,
+            vec![
+                (0, "docs", true),
+                (1, "a", true),
+                (2, "x.txt", false),
+                (1, "z.txt", false),
+                (0, "a.txt", false),
+                (0, "b.txt", false)
+            ]
+        );
+    }
 }

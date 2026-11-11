@@ -11,6 +11,7 @@ pub mod archive;
 pub mod dirsize;
 pub mod fileinfo;
 pub mod i18n;
+pub mod media;
 pub mod ops;
 pub mod platform;
 pub mod preview;

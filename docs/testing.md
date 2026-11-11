@@ -24,7 +24,11 @@ informe.
     *Detalles*; ver los tamaños de carpeta; escribir en la búsqueda (busca en subcarpetas);
     *Abrir con…* y marcar «abrir siempre» (Ajustes ▸ Aplicaciones predeterminadas); vista previa
     de un PDF, una canción con carátula y un vídeo; extraer un RAR; ZIP con contraseña.
-11. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
+11. Reproductor: *Reproducir* una canción con carátula y un vídeo; cambiar de archivo (se acopla
+    abajo y el vídeo sigue visible ahí); la lista con varias pistas; pasar a la siguiente al
+    acabar; abrir un menú o un diálogo encima del vídeo (debe ocultarse mientras); cerrar.
+12. Vista previa: un PDF de texto pequeño (nítido) y pasar páginas; un ZIP con carpetas (árbol).
+13. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
 
 ## Tests automáticos
 

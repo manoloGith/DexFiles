@@ -27,6 +27,11 @@ pub enum Content {
     Pdf {
         image: egui::ColorImage,
         pages: usize,
+        /// Which page (from 0), and the local file, to render another page or size.
+        page: usize,
+        path: std::path::PathBuf,
+        /// The longer side it was rendered at, in pixels.
+        px: u32,
     },
     Text {
         text: String,
@@ -97,15 +102,22 @@ const PDF_LIMIT: usize = 120 * 1024 * 1024;
 
 /// A PDF's first page as an image fitting `max` pixels, and its page count (hayro, the pure
 /// Rust renderer PdfCraft uses).
-pub fn render_pdf(bytes: Vec<u8>, max: u32) -> Result<(egui::ColorImage, usize), String> {
+pub fn render_pdf(
+    bytes: Vec<u8>,
+    page_index: usize,
+    max: u32,
+) -> Result<(egui::ColorImage, usize), String> {
     use hayro::hayro_interpret::InterpreterSettings;
     use hayro::hayro_syntax::Pdf;
     let pdf = Pdf::new(bytes).map_err(|e| format!("{e:?}"))?;
     let pages = pdf.pages();
     let count = pages.len();
-    let page = pages.first().ok_or_else(|| "no pages".to_owned())?;
+    let page = pages
+        .get(page_index.min(count.saturating_sub(1)))
+        .ok_or_else(|| "no pages".to_owned())?;
     let (w, h) = page.render_dimensions();
-    let scale = (max as f32 / w.max(h).max(1.0)).min(3.0);
+    // Rendered at the size it is shown, in device pixels (sharp text), within reason.
+    let scale = (max.clamp(64, 4096) as f32 / w.max(h).max(1.0)).min(8.0);
     let cache = hayro::RenderCache::new();
     let pixmap_settings = hayro::PixmapSettings {
         x_scale: scale,
@@ -124,6 +136,23 @@ pub fn render_pdf(bytes: Vec<u8>, max: u32) -> Result<(egui::ColorImage, usize),
         egui::ColorImage::from_rgba_premultiplied(size, pixmap.data_as_u8_slice()),
         count,
     ))
+}
+
+/// One page of a local PDF, `px` pixels on its longer side.
+pub fn pdf_page(path: &Path, page: usize, px: u32) -> Content {
+    match std::fs::read(path)
+        .map_err(|e| e.to_string())
+        .and_then(|b| render_pdf(b, page, px))
+    {
+        Ok((image, pages)) => Content::Pdf {
+            image,
+            pages,
+            page: page.min(pages.saturating_sub(1)),
+            path: path.to_path_buf(),
+            px,
+        },
+        Err(e) => Content::Error(e),
+    }
 }
 
 /// A picture (cover art, a frame) and (i18n key, value) details of an audio or video file.
@@ -159,9 +188,14 @@ pub fn audio(path: &Path, max: u32) -> Option<MediaInfo> {
         info.push(("media_bitrate", format!("{b} kbps")));
     }
     if let Some(r) = props.sample_rate() {
+        let khz = format!("{:.1} kHz", f64::from(r) / 1000.0);
         info.push((
             "media_sample_rate",
-            format!("{:.1} kHz", f64::from(r) / 1000.0),
+            if crate::i18n::decimal_comma() {
+                khz.replace('.', ",")
+            } else {
+                khz
+            },
         ));
     }
     let cover = tag
@@ -206,7 +240,7 @@ pub fn thumbnail(entry: &Entry, size: u32) -> Option<egui::ColorImage> {
     }
     if entry.ext == "pdf" && entry.size as usize <= PDF_LIMIT {
         let bytes = read(entry, PDF_LIMIT).ok()?;
-        return render_pdf(bytes, size).ok().map(|(i, _)| i);
+        return render_pdf(bytes, 0, size).ok().map(|(i, _)| i);
     }
     if !decodable_image(&entry.ext) || entry.size as usize > IMAGE_LIMIT {
         return None;
@@ -509,13 +543,11 @@ pub fn load(entry: &Entry, max_px: u32) -> Content {
             if entry.size as usize > PDF_LIMIT {
                 return Content::None("preview_too_big");
             }
-            match read(entry, PDF_LIMIT)
-                .map_err(|e| e.to_string())
-                .and_then(|b| render_pdf(b, max_px.min(1400)))
-            {
-                Ok((image, pages)) => Content::Pdf { image, pages },
-                Err(e) => Content::Error(e),
-            }
+            let path = match vfs::local_copy(&entry.location, &mut |_| true) {
+                Ok(p) => p,
+                Err(e) => return Content::Error(e.to_string()),
+            };
+            pdf_page(&path, 0, max_px)
         }
         _ => {
             // Unknown types: show them as text if they look like text.
@@ -562,8 +594,15 @@ mod tests {
         wav.resize(wav.len() + samples as usize * 2, 0);
         std::fs::write(&path, wav).unwrap_or_default();
         let (_, info) = audio(&path, 100).unwrap_or_else(|| unreachable!());
-        assert!(info.contains(&("media_duration", "0:02".to_owned())), "{info:?}");
-        assert!(info.iter().any(|(k, v)| *k == "media_sample_rate" && v.starts_with("8")), "{info:?}");
+        assert!(
+            info.contains(&("media_duration", "0:02".to_owned())),
+            "{info:?}"
+        );
+        assert!(
+            info.iter()
+                .any(|(k, v)| *k == "media_sample_rate" && v.starts_with("8")),
+            "{info:?}"
+        );
     }
 
     #[test]

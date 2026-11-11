@@ -222,3 +222,8 @@ pub fn video_frame(path: &Path, max: u32) -> Option<crate::preview::MediaInfo> {
     }
     Some((image, info))
 }
+
+/// The media player in the activity (`player_<op>`); its JSON answer.
+pub fn player(op: &str, args: serde_json::Value) -> serde_json::Value {
+    call(&format!("player_{op}"), args)
+}

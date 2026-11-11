@@ -61,7 +61,14 @@ pub fn window(app: &mut App, ui: &mut Ui) {
             )
             .show(ui, |ui| super::sidebar::show(app, ui));
     }
-    if app.settings.show_preview && !app.narrow {
+    // On a narrow window the player is a strip at the bottom.
+    if app.narrow && app.player.is_some() {
+        egui::Panel::bottom("player-strip")
+            .exact_size(150.0)
+            .frame(egui::Frame::new().fill(pal.sidebar).inner_margin(8))
+            .show(ui, |ui| super::player::show(app, ui));
+    }
+    if (app.settings.show_preview || app.player.is_some()) && !app.narrow {
         egui::Panel::right("preview")
             .resizable(true)
             .default_size(300.0)
@@ -661,6 +668,9 @@ fn item_menu(app: &mut App, ui: &mut Ui, p: usize, e: &Entry) {
     }
     if ui.button(t("open")).clicked() {
         app.actions.push(Action::Open(p, e.clone()));
+    }
+    if super::player::playable(e) && crate::media::available() && ui.button(t("play")).clicked() {
+        app.actions.push(Action::Play(e.clone()));
     }
     if e.is_dir() {
         if ui.button(t("open_new_tab")).clicked() {

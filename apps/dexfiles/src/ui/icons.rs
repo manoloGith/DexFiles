@@ -315,6 +315,11 @@ pub enum Sym {
     Share,
     Clock,
     Root,
+    Play,
+    Pause,
+    Previous,
+    Next,
+    Playlist,
 }
 
 pub fn sym(painter: &Painter, rect: Rect, s: Sym, color: Color32) {
@@ -416,6 +421,45 @@ pub fn sym(painter: &Painter, rect: Rect, s: Sym, color: Color32) {
             line(&[p(-0.85, 0.0), p(0.0, -0.8), p(0.85, 0.0)]);
             line(&[p(-0.6, -0.2), p(-0.6, 0.8), p(0.6, 0.8), p(0.6, -0.2)]);
             line(&[p(-0.15, 0.8), p(-0.15, 0.3), p(0.15, 0.3), p(0.15, 0.8)]);
+        }
+        Sym::Play => {
+            painter.add(Shape::convex_polygon(
+                vec![p(-0.45, -0.75), p(0.75, 0.0), p(-0.45, 0.75)],
+                color,
+                Stroke::NONE,
+            ));
+        }
+        Sym::Pause => {
+            for x in [-0.35, 0.35] {
+                painter.rect_filled(
+                    Rect::from_center_size(p(x, 0.0), vec2(h * 0.38, h * 1.5)),
+                    1,
+                    color,
+                );
+            }
+        }
+        Sym::Previous | Sym::Next => {
+            let d = if s == Sym::Next { 1.0 } else { -1.0 };
+            painter.add(Shape::convex_polygon(
+                vec![p(-0.55 * d, -0.6), p(0.35 * d, 0.0), p(-0.55 * d, 0.6)],
+                color,
+                Stroke::NONE,
+            ));
+            painter.rect_filled(
+                Rect::from_center_size(p(0.55 * d, 0.0), vec2(h * 0.22, h * 1.2)),
+                1,
+                color,
+            );
+        }
+        Sym::Playlist => {
+            for y in [-0.6, -0.15, 0.3] {
+                line(&[p(-0.85, y), p(0.35, y)]);
+            }
+            painter.add(Shape::convex_polygon(
+                vec![p(0.45, 0.35), p(0.9, 0.62), p(0.45, 0.9)],
+                color,
+                Stroke::NONE,
+            ));
         }
         Sym::Drive | Sym::Root => {
             painter.rect_stroke(

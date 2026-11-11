@@ -20,6 +20,16 @@ use crate::vfs::{self, Entry, Location, ServerId};
 
 /// What the worker threads send back.
 pub enum Msg {
+    /// The player's file is ready (downloaded if remote, opened), or failed.
+    PlayerOpened {
+        index: usize,
+        result: Result<(), String>,
+    },
+    /// The cover art (or frame) of the player's file.
+    PlayerCover {
+        index: usize,
+        image: Option<egui::ColorImage>,
+    },
     Listing {
         tab: u64,
         generation: u64,
@@ -92,6 +102,8 @@ pub enum Action {
     ClearSearch(usize),
     SetView(ViewMode),
     QuickLook(Entry),
+    /// Play a file in the preview panel's player (with the media files around it as queue).
+    Play(Entry),
     Settings,
     About,
     CompressNow {
@@ -184,6 +196,9 @@ pub struct App {
     applied_theme: Option<bool>,
     applied_zoom: f32,
     pub quick_look: Option<Entry>,
+    pub player: Option<super::player::Player>,
+    /// The PDF page re-render asked for (path, page, px), not to ask twice.
+    pub pdf_request: Option<(PathBuf, usize, u32)>,
     closing: bool,
     pub dir_sizes: crate::dirsize::DirSizes,
     sizes_generation: u64,
@@ -279,6 +294,8 @@ impl App {
             applied_theme: None,
             applied_zoom: 0.0,
             quick_look: None,
+            player: None,
+            pdf_request: None,
             closing: false,
             dir_sizes: crate::dirsize::DirSizes::new(&ctx),
             sizes_generation: 0,
@@ -498,11 +515,13 @@ impl App {
                             _ => None,
                         };
                         if let Some(image) = picture {
-                            self.preview.texture = Some(self.ctx.load_texture(
-                                "preview",
-                                image.clone(),
-                                egui::TextureOptions::LINEAR,
-                            ));
+                            // Mipmaps: photos shown smaller than they are stay smooth.
+                            let options = egui::TextureOptions {
+                                mipmap_mode: Some(egui::TextureFilter::Linear),
+                                ..egui::TextureOptions::LINEAR
+                            };
+                            self.preview.texture =
+                                Some(self.ctx.load_texture("preview", image.clone(), options));
                         }
                         self.preview.content = Some(content);
                     }
@@ -513,6 +532,8 @@ impl App {
                     }
                 }
                 Msg::Status(text) => self.say(text),
+                Msg::PlayerOpened { index, result } => super::player::opened(self, index, result),
+                Msg::PlayerCover { index, image } => super::player::cover(self, index, image),
             }
         }
     }
@@ -648,6 +669,26 @@ impl App {
             return;
         }
         self.open_file(entry.location, false);
+    }
+
+    /// Render another page of the previewed PDF, or the same at another size (`px`: its longer
+    /// side in device pixels).
+    pub fn request_pdf(&mut self, path: PathBuf, page: usize, px: u32) {
+        let want = (path.clone(), page, px);
+        if self.pdf_request.as_ref() == Some(&want) {
+            return;
+        }
+        self.pdf_request = Some(want);
+        let key = self.preview.key.clone();
+        let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
+        let _ = std::thread::Builder::new()
+            .name("dexfiles-pdf".into())
+            .spawn(move || {
+                let content = crate::preview::pdf_page(&path, page, px);
+                let _ = tx.send(Msg::Preview { key, content });
+                ctx.request_repaint();
+            });
     }
 
     /// Open a file: with DexFiles' default app for its kind if there is one, otherwise with the
@@ -1031,6 +1072,13 @@ impl App {
                 };
                 self.set_folder_view(p, f);
                 self.tab_mut(p).scroll_to_cursor = true;
+            }
+            Action::Play(e) => {
+                let (list, index) = super::player::queue_for(self, &e);
+                super::player::start(self, list, index);
+                if !self.narrow {
+                    self.settings.show_preview = true;
+                }
             }
             Action::QuickLook(e) => {
                 self.quick_look = Some(e);
@@ -1506,6 +1554,7 @@ impl App {
             return;
         }
         self.preview.key = key.clone();
+        self.pdf_request = None;
         self.preview.requested_at = Instant::now();
         self.preview.content = None;
         self.preview.texture = None;
@@ -1724,6 +1773,7 @@ impl eframe::App for App {
         self.keyboard(ctx);
         self.refresh_visible_all();
         self.update_preview();
+        super::player::tick(self);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -1738,6 +1788,7 @@ impl eframe::App for App {
             self.handle_action(a);
         }
         self.refresh_visible_all();
+        super::player::end_frame(self, &ctx);
         let title = self.window_title();
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
     }
