@@ -1097,6 +1097,8 @@ fn grid(app: &mut App, ui: &mut Ui, p: usize, mode: ViewMode) {
         }
     }
     let mut rects = Vec::new();
+    // show_rows adds the item spacing to every row: none, so its rows and ours line up.
+    ui.spacing_mut().item_spacing.y = 0.0;
     area.show_rows(ui, cell.y, rows_n, |ui, range| {
         ui.add_space(4.0);
         for row in range {
@@ -1248,6 +1250,8 @@ fn rows(app: &mut App, ui: &mut Ui, p: usize, content: bool) {
     let in_search = search_active(app, p);
     let pal = theme::palette(app.dark);
     let mut rects = Vec::new();
+    // show_rows adds the item spacing to every row: none, so its rows and ours line up.
+    ui.spacing_mut().item_spacing.y = 0.0;
     area.show_rows(ui, h, n, |ui, range| {
         ui.spacing_mut().item_spacing.y = 0.0;
         for i in range {
@@ -1529,6 +1533,8 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
         area = area.vertical_scroll_offset(off);
     }
     let mut rects = Vec::new();
+    // show_rows adds the item spacing to every row: none, so its rows and ours line up.
+    ui.spacing_mut().item_spacing.y = 0.0;
     area.show_rows(ui, h, n, |ui, range| {
         ui.spacing_mut().item_spacing.y = 0.0;
         for i in range {
