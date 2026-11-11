@@ -430,16 +430,31 @@ fn search_field(app: &mut App, ui: &mut Ui, p: usize) {
         r.request_focus();
         app.focus_search = false;
     }
+    let while_typing = app.settings.search_subfolders;
+    let mut clear = false;
     let tab = app.tab_mut(p);
     if r.changed() {
         tab.query.text = text.clone();
-        if tab.search.is_none() {
-            // Typing filters the folder at once; Enter searches below it.
-            tab.filter = text;
-            tab.dirty = true;
+        if text.trim().is_empty() {
+            tab.search_due = None;
+            clear = true;
+        } else {
+            if tab.search.is_none() {
+                // Typing filters the folder at once…
+                tab.filter = text.clone();
+                tab.dirty = true;
+            }
+            // …and, a moment after the last key, searches everything below it as well.
+            if while_typing && text.trim().chars().count() >= 2 {
+                tab.search_due = Some(std::time::Instant::now() + std::time::Duration::from_millis(350));
+            }
         }
     }
+    if clear {
+        app.actions.push(Action::ClearSearch(p));
+    }
     if r.lost_focus() && child.input(|i| i.key_pressed(egui::Key::Enter)) {
+        app.tab_mut(p).search_due = None;
         app.actions.push(Action::Search(p));
     }
     if r.has_focus() && child.input(|i| i.key_pressed(egui::Key::Escape)) {

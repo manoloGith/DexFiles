@@ -110,7 +110,7 @@ fn status_bar(app: &mut App, ui: &mut Ui) {
         let text = if sel == 0 {
             tf("n_items", n)
         } else {
-            let size = tab.total_selected_size();
+            let size: u64 = tab.selected_entries().iter().map(|e| if e.is_dir() { app.dir_size(e).map(|s| s.bytes).unwrap_or(0) } else { e.size }).sum();
             let mut s = format!("{} {}", tf("n_selected", sel), tf("of_n", n));
             if size > 0 {
                 s.push_str(&format!(" · {}", fileinfo::format_size(size)));
@@ -830,33 +830,57 @@ pub fn background_menu(app: &mut App, ui: &mut Ui, p: usize) {
     }
 }
 
-pub fn sort_menu(app: &mut App, ui: &mut Ui) {
-    for k in SortKey::ALL {
-        if ui.radio(app.settings.sort == k, t(k.key())).clicked() {
-            app.settings.sort = k;
-            app.mark_dirty();
+/// The details header's menu: which columns show, how tall the rows are.
+fn column_menu(app: &mut App, ui: &mut Ui) {
+    ui.set_min_width(220.0);
+    let c = &mut app.settings.columns;
+    let d = crate::settings::Columns::default();
+    for (label, slot, default) in [("col_modified", &mut c.modified, d.modified), ("col_kind", &mut c.kind, d.kind), ("col_size", &mut c.size, d.size)] {
+        let mut on = *slot > 0.0;
+        if ui.checkbox(&mut on, t(label)).changed() {
+            *slot = if on { default } else { 0.0 };
         }
     }
     ui.separator();
-    if ui
-        .radio(!app.settings.sort_descending, t("ascending"))
-        .clicked()
-    {
-        app.settings.sort_descending = false;
-        app.mark_dirty();
+    ui.label(egui::RichText::new(t("row_height")).small());
+    ui.horizontal(|ui| {
+        for (key, h) in [("rows_compact", 22.0), ("rows_normal", 26.0), ("rows_large", 34.0)] {
+            if ui.selectable_label((c.row - h).abs() < 0.5, t(key)).clicked() {
+                c.row = h;
+            }
+        }
+    });
+    ui.add(egui::Slider::new(&mut c.row, 20.0..=48.0).show_value(false));
+    ui.separator();
+    if ui.button(t("reset_columns")).clicked() {
+        *c = d;
     }
-    if ui
-        .radio(app.settings.sort_descending, t("descending"))
-        .clicked()
-    {
-        app.settings.sort_descending = true;
-        app.mark_dirty();
+}
+
+pub fn sort_menu(app: &mut App, ui: &mut Ui) {
+    let p = app.active_pane;
+    let mut f = app.folder_view(p);
+    let before = f;
+    for k in SortKey::ALL {
+        if ui.radio(f.sort == k, t(k.key())).clicked() {
+            f.sort = k;
+        }
     }
     ui.separator();
-    if ui
-        .checkbox(&mut app.settings.folders_first, t("folders_first"))
-        .changed()
-    {
+    if ui.radio(!f.descending, t("ascending")).clicked() {
+        f.descending = false;
+    }
+    if ui.radio(f.descending, t("descending")).clicked() {
+        f.descending = true;
+    }
+    if f != before {
+        app.set_folder_view(p, f);
+    }
+    ui.separator();
+    if ui.checkbox(&mut app.settings.folders_first, t("folders_first")).changed() {
+        app.mark_dirty();
+    }
+    if ui.checkbox(&mut app.settings.remember_folder_views, t("remember_views")).changed() {
         app.mark_dirty();
     }
 }
@@ -1116,6 +1140,22 @@ fn grid(app: &mut App, ui: &mut Ui, p: usize, mode: ViewMode) {
     bg.context_menu(|ui| background_menu(app, ui, p));
 }
 
+/// The size column: a file's size, a folder's contents' (computed in the background: "…" until
+/// then), or a dash.
+pub fn size_text(app: &App, e: &Entry) -> String {
+    if !e.is_dir() {
+        return fileinfo::format_size(e.size);
+    }
+    let local = e.location.is_local() && !e.symlink && e.trash.is_none();
+    if !app.settings.folder_sizes || !local {
+        return "—".to_owned();
+    }
+    match app.dir_size(e) {
+        Some(s) => fileinfo::format_size(s.bytes),
+        None => "…".to_owned(),
+    }
+}
+
 fn hover_text(e: &Entry) -> String {
     let mut s = e.name.clone();
     if !e.is_dir() {
@@ -1130,7 +1170,7 @@ fn hover_text(e: &Entry) -> String {
 
 /// List (compact rows) and content (icon with details) views.
 fn rows(app: &mut App, ui: &mut Ui, p: usize, content: bool) {
-    let h = if content { 54.0 } else { 26.0 };
+    let h = if content { 54.0 } else { app.settings.columns.row.clamp(20.0, 48.0) };
     let n = app.tab(p).visible.len();
     app.columns[p] = 1;
     let viewport = ui.available_height();
@@ -1212,15 +1252,13 @@ fn rows(app: &mut App, ui: &mut Ui, p: usize, content: bool) {
                     FontId::proportional(12.0),
                     weak,
                 );
-                if !e.is_dir() {
-                    ui.painter().text(
-                        pos2(row.right() - 10.0, row.top() + 36.0),
-                        Align2::RIGHT_CENTER,
-                        fileinfo::format_size(e.size),
-                        FontId::proportional(12.0),
-                        weak,
-                    );
-                }
+                ui.painter().text(
+                    pos2(row.right() - 10.0, row.top() + 36.0),
+                    Align2::RIGHT_CENTER,
+                    size_text(app, &e),
+                    FontId::proportional(12.0),
+                    weak,
+                );
             } else {
                 let g = ui
                     .painter()
@@ -1231,11 +1269,7 @@ fn rows(app: &mut App, ui: &mut Ui, p: usize, content: bool) {
                     g,
                     color,
                 );
-                let right = if e.is_dir() {
-                    String::new()
-                } else {
-                    fileinfo::format_size(e.size)
-                };
+                let right = size_text(app, &e);
                 ui.painter().text(
                     pos2(row.right() - 10.0, row.center().y),
                     Align2::RIGHT_CENTER,
@@ -1255,78 +1289,55 @@ fn rows(app: &mut App, ui: &mut Ui, p: usize, content: bool) {
 fn details(app: &mut App, ui: &mut Ui, p: usize) {
     let pal = theme::palette(app.dark);
     let in_search = search_active(app, p);
-    let h = 26.0;
-    // columns: name (flex), [folder when searching], modified, kind, size
+    let cols_cfg = app.settings.columns;
+    let h = cols_cfg.row.clamp(20.0, 48.0);
+    let fv = app.folder_view(p);
+    // Columns: name (takes what is left), [folder when searching], modified, kind, size. Their
+    // widths are the user's (drag a header's edge); on narrow windows the optional ones hide.
     let width = ui.available_width();
-    let date_w = if app.narrow { 0.0 } else { 150.0 };
-    let kind_w = if app.narrow || width < 700.0 {
-        0.0
-    } else {
-        130.0
-    };
-    let size_w = 84.0;
-    let folder_w = if in_search && width > 800.0 {
-        200.0
-    } else {
-        0.0
-    };
-    let name_w = (width - date_w - kind_w - size_w - folder_w - 40.0).max(120.0);
+    let date_w = if app.narrow { 0.0 } else { cols_cfg.modified };
+    let kind_w = if app.narrow || width < 640.0 { 0.0 } else { cols_cfg.kind };
+    let size_w = cols_cfg.size.max(if cols_cfg.size > 0.0 { 50.0 } else { 0.0 });
+    let folder_w = if in_search && width > 560.0 { cols_cfg.folder.min(width * 0.3) } else { 0.0 };
+    let name_w = (width - date_w - kind_w - size_w - folder_w - 34.0).max(120.0);
     // header
-    let (hrect, _) = ui.allocate_exact_size(vec2(width, 24.0), Sense::hover());
-    ui.painter().line_segment(
-        [hrect.left_bottom(), hrect.right_bottom()],
-        Stroke::new(1.0, pal.separator),
-    );
+    let (hrect, hresp) = ui.allocate_exact_size(vec2(width, 26.0), Sense::click());
+    ui.painter().line_segment([hrect.left_bottom(), hrect.right_bottom()], Stroke::new(1.0, pal.separator));
     let mut x = hrect.left() + 34.0;
-    let cols: Vec<(Option<SortKey>, &str, f32, bool)> = vec![
-        (Some(SortKey::Name), "col_name", name_w, false),
-        (None, "col_folder", folder_w, false),
-        (Some(SortKey::Modified), "col_modified", date_w, false),
-        (Some(SortKey::Kind), "col_kind", kind_w, false),
-        (Some(SortKey::Size), "col_size", size_w, true),
+    #[derive(Clone, Copy, PartialEq)]
+    enum Col {
+        Name,
+        Folder,
+        Modified,
+        Kind,
+        Size,
+    }
+    let cols: [(Col, Option<SortKey>, &str, f32, bool); 5] = [
+        (Col::Name, Some(SortKey::Name), "col_name", name_w, false),
+        (Col::Folder, None, "col_folder", folder_w, false),
+        (Col::Modified, Some(SortKey::Modified), "col_modified", date_w, false),
+        (Col::Kind, Some(SortKey::Kind), "col_kind", kind_w, false),
+        (Col::Size, Some(SortKey::Size), "col_size", size_w, true),
     ];
-    for (key, label, w, right) in &cols {
-        if *w <= 0.0 {
+    for (col, key, label, w, right) in cols {
+        if w <= 0.0 {
             continue;
         }
-        let r = Rect::from_min_size(pos2(x, hrect.top()), vec2(*w, hrect.height()));
-        let resp = ui.interact(r, ui.scope_id().with(("hdr", p, *label)), Sense::click());
+        let r = Rect::from_min_size(pos2(x, hrect.top()), vec2(w, hrect.height()));
+        let resp = ui.interact(r, ui.scope_id().with(("hdr", p, label)), Sense::click());
         if resp.hovered() {
             ui.painter().rect_filled(r, 4, pal.hover);
         }
-        let text = t(label).to_owned();
-        let sorted = *key == Some(app.settings.sort);
-        let (pos, align) = if *right {
-            (pos2(r.right() - 10.0, r.center().y), Align2::RIGHT_CENTER)
-        } else {
-            (pos2(r.left() + 4.0, r.center().y), Align2::LEFT_CENTER)
-        };
-        let tr = ui.painter().text(
-            pos,
-            align,
-            text,
-            FontId::proportional(12.0),
-            if sorted {
-                ui.visuals().text_color()
-            } else {
-                pal.weak
-            },
-        );
+        let sorted = key == Some(fv.sort);
+        let (pos, align) = if right { (pos2(r.right() - 10.0, r.center().y), Align2::RIGHT_CENTER) } else { (pos2(r.left() + 4.0, r.center().y), Align2::LEFT_CENTER) };
+        let tr = ui.painter().text(pos, align, t(label), FontId::proportional(12.0), if sorted { ui.visuals().text_color() } else { pal.weak });
         if sorted {
             // a small chevron after the label (before it for right-aligned columns)
-            let cx = if *right {
-                tr.left() - 9.0
-            } else {
-                tr.right() + 9.0
-            };
+            let cx = if right { tr.left() - 9.0 } else { tr.right() + 9.0 };
             let rr = Rect::from_center_size(pos2(cx, r.center().y), Vec2::splat(10.0));
-            if app.settings.sort_descending {
+            if fv.descending {
                 ui.painter().add(egui::Shape::line(
-                    vec![
-                        pos2(rr.left(), rr.top() + 3.0),
-                        pos2(rr.center().x, rr.bottom() - 2.0),
-                        pos2(rr.right(), rr.top() + 3.0),
-                    ],
+                    vec![pos2(rr.left(), rr.top() + 3.0), pos2(rr.center().x, rr.bottom() - 2.0), pos2(rr.right(), rr.top() + 3.0)],
                     Stroke::new(1.5, pal.weak),
                 ));
             } else {
@@ -1336,16 +1347,47 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
         if resp.clicked()
             && let Some(k) = key
         {
-            if app.settings.sort == *k {
-                app.settings.sort_descending = !app.settings.sort_descending;
+            let f = if fv.sort == k {
+                crate::settings::FolderView { descending: !fv.descending, ..fv }
             } else {
-                app.settings.sort = *k;
-                app.settings.sort_descending = matches!(k, SortKey::Modified | SortKey::Size);
-            }
-            app.mark_dirty();
+                crate::settings::FolderView { sort: k, descending: matches!(k, SortKey::Modified | SortKey::Size), ..fv }
+            };
+            app.set_folder_view(p, f);
         }
+        // The edge on the left of every column after the name resizes it (dragging left makes
+        // it wider); a double click restores its width.
+        if col != Col::Name {
+            let edge = Rect::from_center_size(pos2(r.left(), r.center().y), vec2(8.0, r.height()));
+            let er = ui.interact(edge, ui.scope_id().with(("hdr-edge", p, label)), Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+            if er.hovered() || er.dragged() {
+                ui.painter().line_segment([pos2(r.left(), r.top() + 4.0), pos2(r.left(), r.bottom() - 4.0)], Stroke::new(2.0, theme::ACCENT));
+            } else {
+                ui.painter().line_segment([pos2(r.left(), r.top() + 6.0), pos2(r.left(), r.bottom() - 6.0)], Stroke::new(1.0, pal.separator));
+            }
+            let c = &mut app.settings.columns;
+            let slot = match col {
+                Col::Folder => &mut c.folder,
+                Col::Modified => &mut c.modified,
+                Col::Kind => &mut c.kind,
+                _ => &mut c.size,
+            };
+            if er.dragged() {
+                *slot = (*slot - er.drag_delta().x).clamp(50.0, 600.0);
+            }
+            if er.double_clicked() {
+                let d = crate::settings::Columns::default();
+                *slot = match col {
+                    Col::Folder => d.folder,
+                    Col::Modified => d.modified,
+                    Col::Kind => d.kind,
+                    _ => d.size,
+                };
+            }
+        }
+        resp.context_menu(|ui| column_menu(app, ui));
         x += w;
     }
+    hresp.context_menu(|ui| column_menu(app, ui));
     let n = app.tab(p).visible.len();
     app.columns[p] = 1;
     let viewport = ui.available_height();
@@ -1416,7 +1458,9 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
                     .galley(pos2(px, row.center().y - g.size().y / 2.0), g, c);
                 x += w;
             };
-            cell(display_name(app, &e), name_w, false, color);
+            let size_label = size_text(app, &e);
+            let name_label = display_name(app, &e);
+            cell(name_label, name_w, false, color);
             let folder = if folder_w > 0.0 {
                 e.location
                     .parent()
@@ -1433,16 +1477,7 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
                 false,
                 weak,
             );
-            cell(
-                if e.is_dir() {
-                    "—".to_owned()
-                } else {
-                    fileinfo::format_size(e.size)
-                },
-                size_w,
-                true,
-                weak,
-            );
+            cell(size_label, size_w, true, weak);
             let resp = resp.on_hover_text_at_pointer(hover_text(&e));
             item_interact(app, ui, p, i, &resp, &e);
         }

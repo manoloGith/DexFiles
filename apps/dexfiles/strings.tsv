@@ -243,3 +243,12 @@ where	Where	Ubicación
 yes	Yes	Sí
 yesterday	Yesterday	Ayer
 zoom	Interface size	Tamaño de la interfaz
+remember_views	Remember each folder's view and order	Recordar la vista y el orden de cada carpeta
+forget_views	Forget them ({})	Olvidarlas ({})
+show_folder_sizes	Show folder sizes (computed in the background)	Mostrar el tamaño de las carpetas (se calcula en segundo plano)
+search_while_typing	Typing in the search field also searches subfolders	Al escribir en la búsqueda, buscar también en subcarpetas
+row_height	Row height	Altura de las filas
+rows_compact	Compact	Compacta
+rows_normal	Normal	Normal
+rows_large	Large	Grande
+reset_columns	Reset columns	Restablecer columnas

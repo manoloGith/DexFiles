@@ -33,6 +33,8 @@ pub struct Tab {
     pub query: Query,
     pub search: Option<Search>,
     pub search_results: Vec<Entry>,
+    /// When to start the search typed in the field (a little after the last key).
+    pub search_due: Option<std::time::Instant>,
     pub view: Option<ViewMode>,
     /// Select these once the next listing arrives (a new folder, pasted files).
     pub pending_select: Vec<Location>,
@@ -62,6 +64,7 @@ impl Tab {
             query: Query::default(),
             search: None,
             search_results: Vec::new(),
+            search_due: None,
             view: None,
             pending_select: Vec::new(),
             pending_rename: None,
@@ -172,15 +175,15 @@ impl Tab {
             .collect()
     }
 
-    /// Re-sort and re-filter.
+    /// Re-sort and re-filter; `size_of` gives the size to sort by (folders: their contents').
     pub fn refresh_visible(
         &mut self,
         sort: SortKey,
         descending: bool,
         folders_first: bool,
         show_hidden: bool,
+        size_of: &dyn Fn(&Entry) -> u64,
     ) {
-        let now = chrono::Utc::now().timestamp();
         let filter = self.filter.trim().to_owned();
         let source = self.source();
         let mut visible: Vec<usize> = (0..source.len())
@@ -190,8 +193,7 @@ impl Tab {
                     && (filter.is_empty() || crate::search::name_matches(&e.name, &filter))
             })
             .collect();
-        visible.sort_by(|&a, &b| compare(&source[a], &source[b], sort, descending, folders_first));
-        let _ = now;
+        visible.sort_by(|&a, &b| compare(&source[a], &source[b], sort, descending, folders_first, size_of));
         self.visible = visible;
         self.dirty = false;
         // Keep only what is still there selected.
@@ -266,12 +268,6 @@ impl Tab {
         self.selected = all.into_iter().collect();
     }
 
-    pub fn total_selected_size(&self) -> u64 {
-        self.items()
-            .filter(|e| self.selected.contains(&e.location) && !e.is_dir())
-            .map(|e| e.size)
-            .sum()
-    }
 }
 
 pub fn location_title(l: &Location) -> String {
@@ -368,6 +364,7 @@ pub fn compare(
     sort: SortKey,
     descending: bool,
     folders_first: bool,
+    size_of: &dyn Fn(&Entry) -> u64,
 ) -> Ordering {
     if folders_first && a.is_dir() != b.is_dir() {
         return if a.is_dir() {
@@ -380,7 +377,7 @@ pub fn compare(
     let o = match sort {
         SortKey::Name => by_name(),
         SortKey::Modified => a.modified.cmp(&b.modified).then_with(by_name),
-        SortKey::Size => a.size.cmp(&b.size).then_with(by_name),
+        SortKey::Size => size_of(a).cmp(&size_of(b)).then_with(by_name),
         SortKey::Kind => Category::of(&a.ext, a.is_dir())
             .cmp(&Category::of(&b.ext, b.is_dir()))
             .then_with(|| a.ext.cmp(&b.ext))

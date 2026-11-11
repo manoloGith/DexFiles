@@ -222,6 +222,16 @@ impl Search {
         self.done.load(Ordering::SeqCst)
     }
 
+    /// Results found since the first `from` (to append, instead of copying them all each time).
+    pub fn take_from(&self, from: usize) -> Vec<Entry> {
+        let r = self.results.lock().unwrap_or_else(PoisonError::into_inner);
+        r.get(from..).map(<[Entry]>::to_vec).unwrap_or_default()
+    }
+
+    pub fn count(&self) -> usize {
+        self.results.lock().unwrap_or_else(PoisonError::into_inner).len()
+    }
+
     pub fn snapshot(&self) -> Vec<Entry> {
         self.results
             .lock()
@@ -268,6 +278,12 @@ fn content_matches(e: &Entry, needle: &str) -> bool {
     fold(needle).split_whitespace().all(|w| hay.contains(w))
 }
 
+/// At most this many results (a search for "e" in a whole phone stays usable).
+pub const MAX_RESULTS: usize = 20_000;
+
+/// Folders a search never enters (virtual file systems).
+const SKIP: &[&str] = &["/proc", "/sys", "/dev", "/run", "/storage/emulated/0/Android/data", "/storage/emulated/0/Android/obb"];
+
 pub fn start(ctx: &egui::Context, root: Location, query: Query) -> Search {
     let search = Search {
         root: root.clone(),
@@ -277,70 +293,209 @@ pub fn start(ctx: &egui::Context, root: Location, query: Query) -> Search {
         scanned: Arc::new(AtomicU64::new(0)),
         cancel: Arc::new(AtomicBool::new(false)),
     };
-    let (results, done, scanned, cancel) = (
-        search.results.clone(),
-        search.done.clone(),
-        search.scanned.clone(),
-        search.cancel.clone(),
-    );
+    let shared = Shared {
+        results: search.results.clone(),
+        scanned: search.scanned.clone(),
+        cancel: search.cancel.clone(),
+        ctx: ctx.clone(),
+        last_repaint: Mutex::new(std::time::Instant::now()),
+    };
+    let done = search.done.clone();
     let ctx = ctx.clone();
-    let _ = std::thread::Builder::new()
-        .name("dexfiles-search".into())
-        .spawn(move || {
-            let now = chrono::Utc::now().timestamp();
-            let mut stack = vec![root];
-            let mut last_repaint = std::time::Instant::now();
-            // With content search, a name match is not required: either matches.
-            let mut meta_query = query.clone();
-            if query.content {
-                meta_query.text.clear();
-            }
-            while let Some(dir) = stack.pop() {
-                if cancel.load(Ordering::SeqCst) {
-                    break;
-                }
-                let Ok(entries) = vfs::list(&dir) else {
-                    continue;
-                };
-                for e in entries {
-                    if cancel.load(Ordering::SeqCst) {
-                        break;
-                    }
-                    scanned.fetch_add(1, Ordering::Relaxed);
-                    if e.hidden && !query.include_hidden {
-                        continue;
-                    }
-                    if e.kind == Kind::Dir && query.recursive && !e.symlink {
-                        stack.push(e.location.clone());
-                    }
-                    let hit = if query.content && !query.text.trim().is_empty() {
-                        meta_query.matches_meta(&e, now)
-                            && (name_matches(&e.name, &query.text)
-                                || content_matches(&e, &query.text))
-                    } else {
-                        query.matches_meta(&e, now)
+    let _ = std::thread::Builder::new().name("dexfiles-search".into()).spawn(move || {
+        match &root {
+            Location::Local(path) => search_local(path.clone(), &query, &shared),
+            _ => search_listing(root.clone(), &query, &shared),
+        }
+        done.store(true, Ordering::SeqCst);
+        ctx.request_repaint();
+    });
+    search
+}
+
+/// What the searching threads share.
+struct Shared {
+    results: Arc<Mutex<Vec<Entry>>>,
+    scanned: Arc<AtomicU64>,
+    cancel: Arc<AtomicBool>,
+    ctx: egui::Context,
+    last_repaint: Mutex<std::time::Instant>,
+}
+
+impl Shared {
+    fn stopped(&self) -> bool {
+        self.cancel.load(Ordering::Relaxed)
+    }
+
+    /// Hand over a batch of results; stop when there are enough.
+    fn publish(&self, batch: &mut Vec<Entry>) {
+        if batch.is_empty() {
+            return;
+        }
+        let mut r = self.results.lock().unwrap_or_else(PoisonError::into_inner);
+        r.append(batch);
+        if r.len() >= MAX_RESULTS {
+            r.truncate(MAX_RESULTS);
+            self.cancel.store(true, Ordering::Relaxed);
+        }
+        drop(r);
+        let mut last = self.last_repaint.lock().unwrap_or_else(PoisonError::into_inner);
+        if last.elapsed().as_millis() > 120 {
+            *last = std::time::Instant::now();
+            self.ctx.request_repaint();
+        }
+    }
+}
+
+/// Whether an entry is a hit (its metadata is known).
+fn is_hit(e: &Entry, query: &Query, meta_query: &Query, now: i64) -> bool {
+    if query.content && !query.text.trim().is_empty() {
+        meta_query.matches_meta(e, now) && (name_matches(&e.name, &query.text) || content_matches(e, &query.text))
+    } else {
+        query.matches_meta(e, now)
+    }
+}
+
+/// Local folders: several threads take folders from a shared queue and read them with
+/// `read_dir` alone (its file types need no extra system call); only candidates are looked at
+/// further (their dates and sizes), and only when the query asks.
+fn search_local(root: std::path::PathBuf, query: &Query, shared: &Shared) {
+    use std::sync::Condvar;
+    struct Queue {
+        dirs: Vec<std::path::PathBuf>,
+        busy: usize,
+    }
+    let queue = Mutex::new(Queue { dirs: vec![root], busy: 0 });
+    let wake = Condvar::new();
+    let now = chrono::Utc::now().timestamp();
+    let mut meta_query = query.clone();
+    if query.content {
+        meta_query.text.clear();
+    }
+    let text = query.text.trim().to_owned();
+    // Name-only queries can reject entries before looking at them closely.
+    let name_gate = !text.is_empty() && !query.content;
+    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2).clamp(2, 6);
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| {
+                let mut batch = Vec::new();
+                loop {
+                    let dir = {
+                        let mut q = queue.lock().unwrap_or_else(PoisonError::into_inner);
+                        loop {
+                            if shared.stopped() {
+                                q.dirs.clear();
+                                wake.notify_all();
+                                break None;
+                            }
+                            if let Some(d) = q.dirs.pop() {
+                                q.busy += 1;
+                                break Some(d);
+                            }
+                            if q.busy == 0 {
+                                wake.notify_all();
+                                break None;
+                            }
+                            q = wake.wait(q).unwrap_or_else(PoisonError::into_inner);
+                        }
                     };
-                    if hit {
-                        results
-                            .lock()
-                            .unwrap_or_else(PoisonError::into_inner)
-                            .push(e);
-                        if last_repaint.elapsed().as_millis() > 150 {
-                            last_repaint = std::time::Instant::now();
-                            ctx.request_repaint();
+                    let Some(dir) = dir else { break };
+                    let parent = Location::Local(dir.clone());
+                    let mut subdirs = Vec::new();
+                    if let Ok(rd) = std::fs::read_dir(&dir) {
+                        for item in rd.flatten() {
+                            if shared.stopped() {
+                                break;
+                            }
+                            shared.scanned.fetch_add(1, Ordering::Relaxed);
+                            let name = item.file_name().to_string_lossy().into_owned();
+                            if name.starts_with('.') && !query.include_hidden {
+                                continue;
+                            }
+                            let is_dir = item.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                            if is_dir && query.recursive {
+                                let p = item.path();
+                                if !SKIP.iter().any(|s| p == std::path::Path::new(s)) {
+                                    subdirs.push(p);
+                                }
+                            }
+                            if name_gate && !name_matches(&name, &text) {
+                                continue;
+                            }
+                            if let Some(c) = query.category
+                                && Category::of(&if is_dir { String::new() } else { vfs::extension(&name) }, is_dir) != c
+                            {
+                                continue;
+                            }
+                            let Ok(raw) = vfs::local::raw_entry(&item.path(), name) else { continue };
+                            let e = Entry::from_raw(&parent, raw);
+                            if is_hit(&e, query, &meta_query, now) {
+                                batch.push(e);
+                                if batch.len() >= 64 {
+                                    shared.publish(&mut batch);
+                                }
+                            }
                         }
                     }
+                    shared.publish(&mut batch);
+                    let mut q = queue.lock().unwrap_or_else(PoisonError::into_inner);
+                    q.dirs.extend(subdirs);
+                    q.busy -= 1;
+                    wake.notify_all();
                 }
+            });
+        }
+    });
+}
+
+/// Servers: one folder at a time through the connection.
+fn search_listing(root: Location, query: &Query, shared: &Shared) {
+    let now = chrono::Utc::now().timestamp();
+    let mut meta_query = query.clone();
+    if query.content {
+        meta_query.text.clear();
+    }
+    let mut stack = vec![root];
+    let mut batch = Vec::new();
+    while let Some(dir) = stack.pop() {
+        if shared.stopped() {
+            break;
+        }
+        let Ok(entries) = vfs::list(&dir) else { continue };
+        for e in entries {
+            shared.scanned.fetch_add(1, Ordering::Relaxed);
+            if e.hidden && !query.include_hidden {
+                continue;
             }
-            done.store(true, Ordering::SeqCst);
-            ctx.request_repaint();
-        });
-    search
+            if e.kind == Kind::Dir && query.recursive && !e.symlink {
+                stack.push(e.location.clone());
+            }
+            if is_hit(&e, query, &meta_query, now) {
+                batch.push(e);
+            }
+        }
+        shared.publish(&mut batch);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `cargo test --release search::tests::speed -- --ignored --nocapture`
+    #[test]
+    #[ignore = "a timing, not a check"]
+    fn speed() {
+        let ctx = egui::Context::default();
+        let t0 = std::time::Instant::now();
+        let q = Query { text: "lib".into(), recursive: true, ..Default::default() };
+        let s = start(&ctx, Location::local("/usr"), q);
+        while !s.is_done() {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        println!("{} found, {} looked at, in {:?}", s.count(), s.scanned.load(Ordering::Relaxed), t0.elapsed());
+    }
 
     #[test]
     fn names() {

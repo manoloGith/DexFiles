@@ -830,6 +830,15 @@ fn settings_dialog(app: &mut App, ctx: &egui::Context) -> bool {
                     .changed();
                 ui.checkbox(&mut s.thumbnails, t("show_thumbnails"));
                 ui.checkbox(&mut s.remote_thumbnails, t("remote_thumbnails"));
+                dirty |= ui.checkbox(&mut s.folder_sizes, t("show_folder_sizes")).changed();
+                ui.horizontal(|ui| {
+                    dirty |= ui.checkbox(&mut s.remember_folder_views, t("remember_views")).changed();
+                    if !s.folder_views.is_empty() && ui.small_button(tf("forget_views", s.folder_views.len())).clicked() {
+                        s.folder_views.clear();
+                        dirty = true;
+                    }
+                });
+                ui.checkbox(&mut s.search_subfolders, t("search_while_typing"));
                 ui.separator();
                 ui.label(RichText::new(t("appearance")).strong());
                 ui.horizontal(|ui| {

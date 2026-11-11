@@ -1,5 +1,6 @@
 //! Settings, kept by eframe's storage (`app.ron`).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -86,6 +87,42 @@ impl SortKey {
     }
 }
 
+/// How a folder is shown: remembered per folder (see [`Settings::folder_views`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FolderView {
+    pub view: ViewMode,
+    pub sort: SortKey,
+    pub descending: bool,
+}
+
+/// Widths of the details view's columns (the name takes the rest), in points; 0 hides one.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Columns {
+    pub modified: f32,
+    pub kind: f32,
+    pub size: f32,
+    pub folder: f32,
+    /// Row height of the list and details views.
+    pub row: f32,
+}
+
+impl Default for Columns {
+    fn default() -> Self {
+        Columns { modified: 150.0, kind: 130.0, size: 90.0, folder: 200.0, row: 26.0 }
+    }
+}
+
+/// The app DexFiles opens a kind of file with (its own choice, not Android's).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DefaultApp {
+    /// Lowercase extension without the dot.
+    pub ext: String,
+    /// Android: `package/activity`; desktop: the `.desktop` file's id.
+    pub app: String,
+    pub label: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StartMode {
     Home,
@@ -151,6 +188,26 @@ pub struct Settings {
     pub session: Session,
     /// Recent folders (most recent first), for the address bar's suggestions.
     pub recent: Vec<Location>,
+    /// Remember the view and the order of each folder.
+    pub remember_folder_views: bool,
+    /// Folder key ([`folder_key`]) → how it was last shown.
+    pub folder_views: HashMap<String, FolderView>,
+    pub columns: Columns,
+    /// Show (and compute in the background) the size of local folders.
+    pub folder_sizes: bool,
+    /// Typing in the search field searches below the folder too (otherwise Enter does).
+    pub search_subfolders: bool,
+    /// DexFiles' own default apps, by extension.
+    pub default_apps: Vec<DefaultApp>,
+}
+
+/// The key a folder's remembered view is stored under.
+pub fn folder_key(l: &Location) -> String {
+    match l {
+        Location::Local(p) => p.to_string_lossy().into_owned(),
+        Location::Remote { server, path } => format!("server:{}:{path}", server.0),
+        Location::Trash => "trash:".to_owned(),
+    }
 }
 
 impl Default for Settings {
@@ -179,6 +236,12 @@ impl Default for Settings {
             remote_thumbnails: false,
             session: Session::default(),
             recent: Vec::new(),
+            remember_folder_views: true,
+            folder_views: HashMap::new(),
+            columns: Columns::default(),
+            folder_sizes: true,
+            search_subfolders: true,
+            default_apps: Vec::new(),
         }
     }
 }
@@ -222,6 +285,33 @@ impl Settings {
         let id = ServerId(self.next_server_id.max(1));
         self.next_server_id = id.0 + 1;
         id
+    }
+
+    /// How `l` is shown: its remembered view, or the defaults.
+    pub fn folder_view(&self, l: &Location) -> FolderView {
+        let default = FolderView { view: self.view, sort: self.sort, descending: self.sort_descending };
+        if !self.remember_folder_views {
+            return default;
+        }
+        self.folder_views.get(&folder_key(l)).copied().unwrap_or(default)
+    }
+
+    /// Change how `l` is shown (remembered for it, or the defaults when not remembering).
+    pub fn set_folder_view(&mut self, l: &Location, f: FolderView) {
+        if self.remember_folder_views {
+            if self.folder_views.len() > 5000 {
+                self.folder_views.clear();
+            }
+            self.folder_views.insert(folder_key(l), f);
+        } else {
+            self.view = f.view;
+            self.sort = f.sort;
+            self.sort_descending = f.descending;
+        }
+    }
+
+    pub fn default_app(&self, ext: &str) -> Option<&DefaultApp> {
+        self.default_apps.iter().find(|d| d.ext == ext)
     }
 
     pub fn add_recent(&mut self, loc: &Location) {

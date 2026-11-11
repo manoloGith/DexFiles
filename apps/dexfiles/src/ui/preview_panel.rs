@@ -78,8 +78,12 @@ fn header(app: &mut App, ui: &mut Ui, e: &Entry) {
         }
         ui.add(egui::Label::new(RichText::new(&e.name).strong().size(15.0)).wrap());
         let mut sub = fileinfo::kind_label(&e.ext, e.is_dir());
-        if !e.is_dir() {
-            sub.push_str(&format!(" · {}", fileinfo::format_size(e.size)));
+        let size = super::view::size_text(app, e);
+        if size != "—" {
+            sub.push_str(&format!(" · {size}"));
+        }
+        if let Some(s) = app.dir_size(e) {
+            sub.push_str(&format!(" · {}", tf("n_items", s.items)));
         }
         ui.label(RichText::new(sub).color(pal.weak));
         ui.horizontal(|ui| {

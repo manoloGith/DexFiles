@@ -7,6 +7,7 @@
 //! desktop, to iterate without a device.
 
 pub mod archive;
+pub mod dirsize;
 pub mod fileinfo;
 pub mod i18n;
 pub mod ops;

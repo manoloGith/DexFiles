@@ -15,7 +15,7 @@ use crate::archive::ArchiveFormat;
 use crate::i18n::{t, tf};
 use crate::ops::{self, Job, JobKind, Mode};
 use crate::platform::Volume;
-use crate::settings::{Favorite, Settings, ThemeChoice, ViewMode};
+use crate::settings::{Favorite, FolderView, Settings, SortKey, ThemeChoice, ViewMode};
 use crate::vfs::{self, Entry, Location, ServerId};
 
 /// What the worker threads send back.
@@ -184,6 +184,8 @@ pub struct App {
     applied_zoom: f32,
     pub quick_look: Option<Entry>,
     closing: bool,
+    pub dir_sizes: crate::dirsize::DirSizes,
+    sizes_generation: u64,
 }
 
 impl App {
@@ -277,6 +279,8 @@ impl App {
             applied_zoom: 0.0,
             quick_look: None,
             closing: false,
+            dir_sizes: crate::dirsize::DirSizes::new(&ctx),
+            sizes_generation: 0,
         };
         for p in 0..2 {
             for i in 0..app.panes[p].tabs.len() {
@@ -295,7 +299,31 @@ impl App {
     }
 
     pub fn view_mode(&self, pane: usize) -> ViewMode {
-        self.tab(pane).view.unwrap_or(self.settings.view)
+        self.folder_view(pane).view
+    }
+
+    /// How the pane's folder is shown (remembered per folder).
+    pub fn folder_view(&self, pane: usize) -> FolderView {
+        self.settings.folder_view(self.tab(pane).location())
+    }
+
+    /// Change how the pane's folder is shown; it is remembered for that folder.
+    pub fn set_folder_view(&mut self, pane: usize, f: FolderView) {
+        let here = self.tab(pane).location().clone();
+        self.settings.set_folder_view(&here, f);
+        for p in &mut self.panes {
+            for t in &mut p.tabs {
+                t.dirty = true;
+            }
+        }
+    }
+
+    /// A folder's size (local folders, when the setting is on); asks for it if unknown.
+    pub fn dir_size(&self, e: &Entry) -> Option<crate::dirsize::Size> {
+        if !self.settings.folder_sizes || !e.is_dir() || e.symlink || e.trash.is_some() {
+            return None;
+        }
+        e.location.as_local().and_then(|p| self.dir_sizes.get(p))
     }
 
     pub fn other_pane(&self) -> usize {
@@ -533,6 +561,12 @@ impl App {
                     }
                     self.load(p, i);
                 }
+            }
+        }
+        // Folder sizes above what changed are stale.
+        for t in touched.iter().chain(created.iter()) {
+            if let Location::Local(path) = t {
+                self.dir_sizes.invalidate(path);
             }
         }
         // Folder tree: forget the touched folders' children.
@@ -943,8 +977,8 @@ impl App {
             }
             Action::SetView(v) => {
                 let p = self.active_pane;
-                self.settings.view = v;
-                self.tab_mut(p).view = None;
+                let f = FolderView { view: v, ..self.folder_view(p) };
+                self.set_folder_view(p, f);
                 self.tab_mut(p).scroll_to_cursor = true;
             }
             Action::QuickLook(e) => {
@@ -1018,15 +1052,30 @@ impl App {
             }
             self.ctx.request_repaint_after(Duration::from_secs(1));
         }
-        // Search results stream in.
+        // Search results stream in (only the new ones are copied).
         for p in 0..2 {
             for tab in &mut self.panes[p].tabs {
                 if let Some(s) = &tab.search {
-                    let n = s.results.lock().map(|r| r.len()).unwrap_or(0);
-                    if n != tab.search_results.len() {
-                        tab.search_results = s.snapshot();
+                    let n = s.count();
+                    if n > tab.search_results.len() && tab.last_check.elapsed() > Duration::from_millis(150) {
+                        let new = s.take_from(tab.search_results.len());
+                        tab.search_results.extend(new);
                         tab.dirty = true;
+                        tab.last_check = Instant::now();
                     }
+                    if n > tab.search_results.len() || !s.is_done() {
+                        self.ctx.request_repaint_after(Duration::from_millis(160));
+                    }
+                }
+            }
+            // A search typed in the field starts once typing pauses.
+            let i = self.panes[p].active;
+            if let Some(due) = self.panes[p].tabs[i].search_due {
+                if Instant::now() >= due {
+                    self.panes[p].tabs[i].search_due = None;
+                    self.actions.push(Action::Search(p));
+                } else {
+                    self.ctx.request_repaint_after(due - Instant::now());
                 }
             }
         }
@@ -1535,16 +1584,26 @@ impl App {
     }
 
     pub fn refresh_visible_all(&mut self) {
-        let (sort, desc, ff, hidden) = (
-            self.settings.sort,
-            self.settings.sort_descending,
-            self.settings.folders_first,
-            self.settings.show_hidden,
-        );
-        for p in &mut self.panes {
-            for t in &mut p.tabs {
-                if t.dirty {
-                    t.refresh_visible(sort, desc, ff, hidden);
+        // A folder size arrived: lists sorted by size sort again.
+        let generation = self.dir_sizes.generation();
+        let sizes_changed = generation != self.sizes_generation;
+        self.sizes_generation = generation;
+        let (ff, hidden) = (self.settings.folders_first, self.settings.show_hidden);
+        let sizes = self.dir_sizes.clone();
+        let with_sizes = self.settings.folder_sizes;
+        let size_of = move |e: &Entry| -> u64 {
+            if e.is_dir() {
+                if with_sizes && let Some(p) = e.location.as_local() { sizes.peek(p).map(|s| s.bytes).unwrap_or(0) } else { 0 }
+            } else {
+                e.size
+            }
+        };
+        for pi in 0..2 {
+            for ti in 0..self.panes[pi].tabs.len() {
+                let f = self.settings.folder_view(self.panes[pi].tabs[ti].location());
+                let t = &mut self.panes[pi].tabs[ti];
+                if t.dirty || (sizes_changed && f.sort == SortKey::Size) {
+                    t.refresh_visible(f.sort, f.descending, ff, hidden, &size_of);
                 }
             }
         }
