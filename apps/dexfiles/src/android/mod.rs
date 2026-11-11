@@ -161,3 +161,28 @@ pub fn media_scan(paths: &[PathBuf]) {
         .collect();
     call("media_scan", json!({ "paths": list }));
 }
+
+/// The apps that handle a type, with their icons (PNG, base64).
+pub fn apps_for(ext: &str, mime: &str) -> Vec<crate::apps::AppInfo> {
+    use base64::Engine as _;
+    let answer = call("apps_for", json!({ "ext": ext, "mime": mime }));
+    let mut out = Vec::new();
+    for a in answer["apps"].as_array().into_iter().flatten() {
+        let Some(id) = a["id"].as_str() else { continue };
+        let icon = a["icon"]
+            .as_str()
+            .and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok())
+            .and_then(|png| crate::apps::icon_from_png(&png));
+        out.push(crate::apps::AppInfo { id: id.to_owned(), label: a["label"].as_str().unwrap_or(id).to_owned(), icon });
+    }
+    out
+}
+
+/// Open a file with one app (`package/activity`).
+pub fn open_with(path: &Path, app: &str) -> Result<(), String> {
+    let answer = call("open", json!({ "path": path.to_string_lossy(), "app": app }));
+    match answer["error"].as_str() {
+        Some(e) => Err(e.to_owned()),
+        None => Ok(()),
+    }
+}

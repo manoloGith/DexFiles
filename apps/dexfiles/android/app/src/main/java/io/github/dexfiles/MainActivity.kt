@@ -45,7 +45,8 @@ class MainActivity : CraftActivity() {
             "storage" -> JSONObject().put("granted", hasStorageAccess()).toString()
             "request_storage" -> { runOnUiThread { requestStorageAccess() }; "{}" }
             "volumes" -> JSONObject().put("volumes", volumes()).toString()
-            "open" -> open(File(args.getString("path")), args.optBoolean("chooser"))
+            "open" -> open(File(args.getString("path")), args.optBoolean("chooser"), args.optString("app"))
+            "apps_for" -> JSONObject().put("apps", appsFor(args.getString("ext"), args.getString("mime"))).toString()
             "share" -> share(args.getJSONArray("paths"), args.optBoolean("email"))
             "media_scan" -> { mediaScan(args.getJSONArray("paths")); "{}" }
             else -> { Log.w(TAG, "files: unknown operation $op"); "{}" }
@@ -113,11 +114,23 @@ class MainActivity : CraftActivity() {
             }
     }
 
-    private fun open(file: File, chooser: Boolean): String {
+    private fun open(file: File, chooser: Boolean, app: String): String {
         val uri = uriFor(file)
         val intent = Intent(Intent.ACTION_VIEW)
             .setDataAndType(uri, mimeFor(file))
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        // DexFiles' own default app for this kind of file (Settings ▸ Default apps).
+        if (app.contains('/')) {
+            val (pkg, cls) = app.split('/', limit = 2)
+            intent.setClassName(pkg, cls)
+            grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            return try {
+                startActivity(intent)
+                "{}"
+            } catch (e: Exception) {
+                JSONObject().put("error", "${e.javaClass.simpleName}: ${e.message}").toString()
+            }
+        }
         val launch = if (chooser) Intent.createChooser(intent, getString(R.string.open_with)) else intent
         runOnUiThread {
             try {
@@ -129,6 +142,40 @@ class MainActivity : CraftActivity() {
         }
         return "{}"
     }
+
+    /** The apps that open this type of file, for DexFiles' own app picker. */
+    private fun appsFor(ext: String, mime: String): JSONArray {
+        val probe = Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse("content://$packageName.dexfiles/root/probe.$ext"), mime)
+        val flags = PackageManager.MATCH_ALL
+        val found = if (Build.VERSION.SDK_INT >= 33) {
+            packageManager.queryIntentActivities(probe, PackageManager.ResolveInfoFlags.of(flags.toLong()))
+        } else {
+            @Suppress("DEPRECATION") packageManager.queryIntentActivities(probe, flags)
+        }
+        val out = JSONArray()
+        for (info in found.distinctBy { it.activityInfo.packageName + "/" + it.activityInfo.name }) {
+            val ai = info.activityInfo ?: continue
+            if (ai.packageName == packageName) continue
+            val item = JSONObject()
+                .put("id", "${ai.packageName}/${ai.name}")
+                .put("label", info.loadLabel(packageManager).toString())
+            iconPng(info.loadIcon(packageManager))?.let { item.put("icon", it) }
+            out.put(item)
+        }
+        return out
+    }
+
+    /** An app's icon as a small PNG, base64. */
+    private fun iconPng(d: android.graphics.drawable.Drawable): String? = runCatching {
+        val size = 96
+        val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        d.setBounds(0, 0, size, size)
+        d.draw(canvas)
+        val bytes = java.io.ByteArrayOutputStream()
+        bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bytes)
+        android.util.Base64.encodeToString(bytes.toByteArray(), android.util.Base64.NO_WRAP)
+    }.getOrNull()
 
     private fun share(paths: JSONArray, email: Boolean): String {
         val files = (0 until paths.length()).map { File(paths.getString(it)) }.filter { it.isFile }

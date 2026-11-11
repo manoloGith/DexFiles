@@ -6,6 +6,7 @@
 //! with OpenGL ES through glow when wgpu can't start. `src/main.rs` runs the same window on a
 //! desktop, to iterate without a device.
 
+pub mod apps;
 pub mod archive;
 pub mod dirsize;
 pub mod fileinfo;

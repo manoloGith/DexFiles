@@ -629,28 +629,40 @@ impl App {
         self.open_file(entry.location, false);
     }
 
+    /// Open a file: with DexFiles' default app for its kind if there is one, otherwise with the
+    /// system's (`chooser`: the system's own app chooser).
     pub fn open_file(&mut self, location: Location, chooser: bool) {
-        match location {
-            Location::Local(p) => {
-                if let Err(e) = crate::platform::open_file(&p, chooser) {
-                    self.say(tf("cant_open", e));
-                }
+        let ext = vfs::extension(&location.name());
+        let app = if chooser { None } else { self.settings.default_app(&ext).map(|d| d.app.clone()) };
+        self.launch(location, app, chooser);
+    }
+
+    /// Open a file with one app (`None`: the system's choice), downloading it first from a server.
+    pub fn launch(&mut self, location: Location, app: Option<String>, chooser: bool) {
+        let tx = self.tx.clone();
+        let open = move |p: &std::path::Path, tx: &Sender<Msg>| {
+            let result = match &app {
+                Some(id) => crate::apps::open_with(p, id).or_else(|e| {
+                    // The chosen app is gone: fall back to the system's.
+                    log::warn!("dexfiles: {id}: {e}");
+                    crate::platform::open_file(p, false)
+                }),
+                None => crate::platform::open_file(p, chooser),
+            };
+            if let Err(e) = result {
+                let _ = tx.send(Msg::Status(tf("cant_open", e)));
             }
+        };
+        match location {
+            Location::Local(p) => open(&p, &tx),
             remote => {
                 self.say(tf("downloading", remote.name()));
-                let tx = self.tx.clone();
-                let _ = std::thread::Builder::new()
-                    .name("dexfiles-open".into())
-                    .spawn(move || match vfs::local_copy(&remote, &mut |_| true) {
-                        Ok(p) => {
-                            if let Err(e) = crate::platform::open_file(&p, chooser) {
-                                let _ = tx.send(Msg::Status(tf("cant_open", e)));
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(Msg::Status(tf("cant_open", e)));
-                        }
-                    });
+                let _ = std::thread::Builder::new().name("dexfiles-open".into()).spawn(move || match vfs::local_copy(&remote, &mut |_| true) {
+                    Ok(p) => open(&p, &tx),
+                    Err(e) => {
+                        let _ = tx.send(Msg::Status(tf("cant_open", e)));
+                    }
+                });
             }
         }
     }
@@ -875,7 +887,10 @@ impl App {
                 self.start_job(JobKind::Extract { archive, dest });
             }
             Action::Share(items, email) => self.share(items, email),
-            Action::OpenWith(l) => self.open_file(l, true),
+            Action::OpenWith(l) => {
+                let ext = vfs::extension(&l.name());
+                self.dialog = Some(Dialog::open_with(ext, Some(l)));
+            }
             Action::CopyPath(items) => {
                 let text = items
                     .iter()

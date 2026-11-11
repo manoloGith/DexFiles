@@ -252,3 +252,18 @@ rows_compact	Compact	Compacta
 rows_normal	Normal	Normal
 rows_large	Large	Grande
 reset_columns	Reset columns	Restablecer columnas
+open_with_title	Open “{}” with	Abrir «{}» con
+default_app_for	Default app for .{} files	App predeterminada para los archivos .{}
+looking_for_apps	Looking for apps…	Buscando aplicaciones…
+no_apps_found	No app can open this kind of file.	Ninguna aplicación puede abrir este tipo de archivo.
+current_default	default	predeterminada
+always_use_for	Always open .{} files with this app (in DexFiles)	Abrir siempre los archivos .{} con esta app (en DexFiles)
+system_chooser	System chooser…	Selector del sistema…
+no_default_app	No default app	Sin app predeterminada
+default_apps	Default apps	Aplicaciones predeterminadas
+default_apps_hint	DexFiles' own choices; they don't change the system's.	Son elecciones de DexFiles; no cambian las del sistema.
+no_default_apps	None yet: “Open with…” can set one.	Ninguna todavía: «Abrir con…» permite elegirla.
+change	Change	Cambiar
+remove_default	Remove	Quitar
+extension	Extension	Extensión
+choose_app	Choose app…	Elegir app…
