@@ -17,9 +17,12 @@ cierre y reapertura fiables, y un informe de diagnóstico que se copia sin adb.
 - **Búsqueda**: filtro instantáneo y búsqueda en subcarpetas por nombre, contenido, tipo, fecha y
   tamaño.
 - **Vistas**: iconos grandes/medianos/pequeños, lista, detalles y contenido; orden por nombre,
-  fecha, tipo, tamaño o estado; ocultos y extensiones; carpeta de inicio configurable.
+  fecha, tipo, tamaño o estado, **recordados por carpeta**; columnas redimensionables; tamaño de
+  las carpetas; ocultos y extensiones; carpeta de inicio configurable.
+- **Aplicaciones predeterminadas propias** (no las de Android), modificables en Ajustes.
+- **Vista previa**: imágenes, PDF, documentos, hojas de cálculo, audio, vídeo y archivos comprimidos.
 
-Estado y plan por fases: [docs/plan.md](docs/plan.md). Compresión (librerías y propuesta para RAR):
+Estado y plan por fases: [docs/plan.md](docs/plan.md). Compresión (librerías y RAR):
 [docs/compression.md](docs/compression.md). Cómo probarlo: [docs/testing.md](docs/testing.md).
 
 ## Estructura
