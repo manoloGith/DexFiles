@@ -34,7 +34,21 @@ las opciones que valoré y lo que he integrado.
 - Progreso y cancelación como cualquier otra operación. Todo en Rust puro: no añade nada al build
   de Android.
 
-## Propuesta para RAR
+## RAR: integrado como *feature* `rar` (fase 2)
+
+Elegiste la opción 1. La *feature* `rar` añade la crate `unrar` (UnRAR de RARLAB, C++): listar y
+extraer, también con contraseña. Está **desactivada por defecto**; la CI de GitHub y los APK que
+se publiquen allí la activan (`./gradlew assembleDebug -Pdexfiles.features=rar`), y un build para
+F-Droid simplemente no la pasa, así que no lleva código de UnRAR. Detalles del build en Android:
+C++ enlazado estáticamente (no hace falta `libc++_shared.so`) y un `libpthread.a` vacío en
+`build.rs`, porque `unrar-sys` pide `-lpthread` y en Android los hilos están en libc.
+
+También en la fase 2: **Zstandard** (`.zst`, `.tar.zst`, con `ruzstd`, Rust puro) y
+**contraseñas**: crear ZIP y 7z cifrados con AES-256 (campo *Contraseña* del diálogo
+*Comprimir*) y, al extraer un ZIP, 7z o RAR cifrado, DexFiles pide la contraseña (y la vuelve a
+pedir si era incorrecta).
+
+## La propuesta original para RAR
 
 1. **Recomendado**: dejar RAR fuera del APK de F-Droid y ofrecer una *feature* `rar` (crate
    `unrar`) para el APK de GitHub. Solo extracción (el formato no permite crear RAR legalmente).
@@ -42,5 +56,3 @@ las opciones que valoré y lo que he integrado.
    BSD; a cambio, el build de Android se complica (CMake + zlib/bzip2/lzma/zstd por ABI).
 3. Mientras tanto, *Abrir con…* manda el .rar a otra app (RAR de RARLAB, ZArchiver…).
 
-Dime cuál prefieres y lo integro en la fase 2, junto con `.zst` y la protección con contraseña
-(ZIP AES y 7z AES, ambas ya soportadas por las librerías elegidas).

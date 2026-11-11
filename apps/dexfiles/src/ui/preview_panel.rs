@@ -70,8 +70,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 fn header(app: &mut App, ui: &mut Ui, e: &Entry) {
     let pal = theme::palette(app.dark);
     ui.vertical_centered(|ui| {
-        let has_image = matches!(app.preview.content, Some(Content::Image { .. }))
-            && app.preview.texture.is_some();
+        let has_image = matches!(
+            app.preview.content,
+            Some(
+                Content::Image { .. } | Content::Pdf { .. } | Content::Media { image: Some(_), .. }
+            )
+        ) && app.preview.texture.is_some();
         if !has_image {
             let (r, _) = ui.allocate_exact_size(Vec2::splat(96.0), egui::Sense::hover());
             super::view::entry_icon(app, ui, r, e, true);
@@ -113,11 +117,42 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
     }
     let width = ui.available_width();
     match &app.preview.content {
-        Some(Content::Image {
-            width: w,
-            height: h,
-            ..
-        }) => {
+        Some(Content::Media { info, .. }) => {
+            if let Some(tex) = &app.preview.texture {
+                let size = tex.size_vec2();
+                let scale = (width / size.x)
+                    .min(if large { 600.0 } else { 300.0 } / size.y)
+                    .min(2.0);
+                ui.vertical_centered(|ui| {
+                    ui.add(
+                        egui::Image::from_texture(tex)
+                            .fit_to_exact_size(size * scale)
+                            .corner_radius(6),
+                    );
+                });
+                ui.add_space(6.0);
+            }
+            egui::Grid::new(("media", large))
+                .num_columns(2)
+                .spacing([10.0, 4.0])
+                .show(ui, |ui| {
+                    for (k, v) in info {
+                        ui.label(RichText::new(t(k)).color(pal.weak));
+                        ui.add(egui::Label::new(v.as_str()).wrap());
+                        ui.end_row();
+                    }
+                });
+        }
+        Some(content @ (Content::Image { .. } | Content::Pdf { .. })) => {
+            let caption = match content {
+                Content::Image {
+                    width: w,
+                    height: h,
+                    ..
+                } => format!("{w} × {h} px"),
+                Content::Pdf { pages, .. } => tf("n_pages", pages),
+                _ => String::new(),
+            };
             if let Some(tex) = &app.preview.texture {
                 let size = tex.size_vec2();
                 let max_h = if large {
@@ -134,11 +169,7 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
                             .fit_to_exact_size(size * scale)
                             .corner_radius(6),
                     );
-                    ui.label(
-                        RichText::new(format!("{w} × {h} px"))
-                            .color(pal.weak)
-                            .small(),
-                    );
+                    ui.label(RichText::new(caption).color(pal.weak).small());
                 });
             }
         }

@@ -96,6 +96,9 @@ pub struct Server {
     /// TLS (FTPS, WebDAV over https): accept a certificate the system doesn't trust (a NAS's own).
     #[serde(default)]
     pub accept_invalid_certs: bool,
+    /// SFTP: a private key file (OpenSSH or PEM); the password, if any, unlocks it.
+    #[serde(default)]
+    pub key_path: String,
 }
 
 impl Server {
@@ -112,6 +115,7 @@ impl Server {
             share: String::new(),
             start_path: "/".to_owned(),
             accept_invalid_certs: false,
+            key_path: String::new(),
         }
     }
 

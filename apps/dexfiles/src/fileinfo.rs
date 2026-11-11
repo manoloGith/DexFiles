@@ -61,7 +61,9 @@ impl Category {
             | "xml" | "yaml" | "yml" | "toml" | "sql" | "swift" | "cs" | "lua" | "gradle"
             | "properties" => Category::Code,
             "zip" | "7z" | "rar" | "tar" | "gz" | "tgz" | "bz2" | "xz" | "tar.gz" | "tar.bz2"
-            | "tar.xz" | "tar.zst" | "zst" | "tzst" | "jar" | "iso" | "cbz" | "cbr" => Category::Archive,
+            | "tar.xz" | "tar.zst" | "zst" | "tzst" | "jar" | "iso" | "cbz" | "cbr" => {
+                Category::Archive
+            }
             "apk" | "apks" | "xapk" | "exe" | "msi" | "deb" | "rpm" | "appimage" | "dmg" => {
                 Category::App
             }
@@ -180,7 +182,7 @@ pub fn format_date_long(secs: Option<i64>) -> String {
 pub fn kind_label(ext: &str, is_dir: bool) -> String {
     let cat = Category::of(ext, is_dir);
     let name = crate::i18n::t(cat.key());
-    if is_dir || ext.is_empty() {
+    if is_dir || ext.is_empty() || name.to_uppercase().contains(&ext.to_uppercase()) {
         name.to_owned()
     } else {
         format!("{name} {}", ext.to_uppercase())

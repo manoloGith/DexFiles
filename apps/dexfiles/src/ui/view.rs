@@ -110,7 +110,17 @@ fn status_bar(app: &mut App, ui: &mut Ui) {
         let text = if sel == 0 {
             tf("n_items", n)
         } else {
-            let size: u64 = tab.selected_entries().iter().map(|e| if e.is_dir() { app.dir_size(e).map(|s| s.bytes).unwrap_or(0) } else { e.size }).sum();
+            let size: u64 = tab
+                .selected_entries()
+                .iter()
+                .map(|e| {
+                    if e.is_dir() {
+                        app.dir_size(e).map(|s| s.bytes).unwrap_or(0)
+                    } else {
+                        e.size
+                    }
+                })
+                .sum();
             let mut s = format!("{} {}", tf("n_selected", sel), tf("of_n", n));
             if size > 0 {
                 s.push_str(&format!(" · {}", fileinfo::format_size(size)));
@@ -342,13 +352,31 @@ fn pane(app: &mut App, ui: &mut Ui, p: usize, dual: bool) {
         ui.vertical_centered(|ui| {
             ui.add_space(60.0);
             ui.heading(t("cant_open_folder"));
-            ui.label(egui::RichText::new(err).color(pal.weak));
+            ui.label(egui::RichText::new(&err).color(pal.weak));
             ui.add_space(8.0);
             if ui.button(t("retry")).clicked() {
                 if let Location::Remote { server, .. } = &here {
                     crate::vfs::servers::disconnect(*server);
                 }
                 app.actions.push(Action::Refresh(p));
+            }
+            // An SFTP server whose key changed (reinstalled, or someone in between): only the
+            // user can say it is fine.
+            #[cfg(feature = "network")]
+            if err.contains(crate::vfs::net::sftp::HOST_KEY_CHANGED)
+                && let Location::Remote { server, .. } = &here
+                && let Some(s) = crate::vfs::servers::server(*server)
+            {
+                ui.add_space(6.0);
+                ui.label(
+                    egui::RichText::new(t("host_key_changed_text"))
+                        .color(ui.visuals().warn_fg_color),
+                );
+                if ui.button(t("trust_new_key")).clicked() {
+                    crate::vfs::net::sftp::forget_host(&s.host, s.port);
+                    crate::vfs::servers::disconnect(*server);
+                    app.actions.push(Action::Refresh(p));
+                }
             }
         });
         background_menu_area(app, ui, p, rect);
@@ -513,7 +541,8 @@ pub fn entry_icon(app: &mut App, ui: &Ui, rect: Rect, e: &Entry, allow_thumb: bo
     let cat = Category::of(&e.ext, e.is_dir());
     let thumb = allow_thumb
         && app.settings.thumbnails
-        && cat == Category::Image
+        && (matches!(cat, Category::Image | Category::Pdf)
+            || (matches!(cat, Category::Audio | Category::Video) && e.location.is_local()))
         && (e.location.is_local() || app.settings.remote_thumbnails)
         && rect.width() >= 30.0;
     let painter = ui.painter();
@@ -836,7 +865,11 @@ fn column_menu(app: &mut App, ui: &mut Ui) {
     ui.set_min_width(220.0);
     let c = &mut app.settings.columns;
     let d = crate::settings::Columns::default();
-    for (label, slot, default) in [("col_modified", &mut c.modified, d.modified), ("col_kind", &mut c.kind, d.kind), ("col_size", &mut c.size, d.size)] {
+    for (label, slot, default) in [
+        ("col_modified", &mut c.modified, d.modified),
+        ("col_kind", &mut c.kind, d.kind),
+        ("col_size", &mut c.size, d.size),
+    ] {
         let mut on = *slot > 0.0;
         if ui.checkbox(&mut on, t(label)).changed() {
             *slot = if on { default } else { 0.0 };
@@ -845,8 +878,15 @@ fn column_menu(app: &mut App, ui: &mut Ui) {
     ui.separator();
     ui.label(egui::RichText::new(t("row_height")).small());
     ui.horizontal(|ui| {
-        for (key, h) in [("rows_compact", 22.0), ("rows_normal", 26.0), ("rows_large", 34.0)] {
-            if ui.selectable_label((c.row - h).abs() < 0.5, t(key)).clicked() {
+        for (key, h) in [
+            ("rows_compact", 22.0),
+            ("rows_normal", 26.0),
+            ("rows_large", 34.0),
+        ] {
+            if ui
+                .selectable_label((c.row - h).abs() < 0.5, t(key))
+                .clicked()
+            {
                 c.row = h;
             }
         }
@@ -878,10 +918,16 @@ pub fn sort_menu(app: &mut App, ui: &mut Ui) {
         app.set_folder_view(p, f);
     }
     ui.separator();
-    if ui.checkbox(&mut app.settings.folders_first, t("folders_first")).changed() {
+    if ui
+        .checkbox(&mut app.settings.folders_first, t("folders_first"))
+        .changed()
+    {
         app.mark_dirty();
     }
-    if ui.checkbox(&mut app.settings.remember_folder_views, t("remember_views")).changed() {
+    if ui
+        .checkbox(&mut app.settings.remember_folder_views, t("remember_views"))
+        .changed()
+    {
         app.mark_dirty();
     }
 }
@@ -1171,7 +1217,11 @@ fn hover_text(e: &Entry) -> String {
 
 /// List (compact rows) and content (icon with details) views.
 fn rows(app: &mut App, ui: &mut Ui, p: usize, content: bool) {
-    let h = if content { 54.0 } else { app.settings.columns.row.clamp(20.0, 48.0) };
+    let h = if content {
+        54.0
+    } else {
+        app.settings.columns.row.clamp(20.0, 48.0)
+    };
     let n = app.tab(p).visible.len();
     app.columns[p] = 1;
     let viewport = ui.available_height();
@@ -1297,13 +1347,26 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
     // widths are the user's (drag a header's edge); on narrow windows the optional ones hide.
     let width = ui.available_width();
     let date_w = if app.narrow { 0.0 } else { cols_cfg.modified };
-    let kind_w = if app.narrow || width < 640.0 { 0.0 } else { cols_cfg.kind };
-    let size_w = cols_cfg.size.max(if cols_cfg.size > 0.0 { 50.0 } else { 0.0 });
-    let folder_w = if in_search && width > 560.0 { cols_cfg.folder.min(width * 0.3) } else { 0.0 };
+    let kind_w = if app.narrow || width < 640.0 {
+        0.0
+    } else {
+        cols_cfg.kind
+    };
+    let size_w = cols_cfg
+        .size
+        .max(if cols_cfg.size > 0.0 { 50.0 } else { 0.0 });
+    let folder_w = if in_search && width > 560.0 {
+        cols_cfg.folder.min(width * 0.3)
+    } else {
+        0.0
+    };
     let name_w = (width - date_w - kind_w - size_w - folder_w - 34.0).max(120.0);
     // header
     let (hrect, hresp) = ui.allocate_exact_size(vec2(width, 26.0), Sense::click());
-    ui.painter().line_segment([hrect.left_bottom(), hrect.right_bottom()], Stroke::new(1.0, pal.separator));
+    ui.painter().line_segment(
+        [hrect.left_bottom(), hrect.right_bottom()],
+        Stroke::new(1.0, pal.separator),
+    );
     let mut x = hrect.left() + 34.0;
     #[derive(Clone, Copy, PartialEq)]
     enum Col {
@@ -1316,7 +1379,13 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
     let cols: [(Col, Option<SortKey>, &str, f32, bool); 5] = [
         (Col::Name, Some(SortKey::Name), "col_name", name_w, false),
         (Col::Folder, None, "col_folder", folder_w, false),
-        (Col::Modified, Some(SortKey::Modified), "col_modified", date_w, false),
+        (
+            Col::Modified,
+            Some(SortKey::Modified),
+            "col_modified",
+            date_w,
+            false,
+        ),
         (Col::Kind, Some(SortKey::Kind), "col_kind", kind_w, false),
         (Col::Size, Some(SortKey::Size), "col_size", size_w, true),
     ];
@@ -1330,15 +1399,37 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
             ui.painter().rect_filled(r, 4, pal.hover);
         }
         let sorted = key == Some(fv.sort);
-        let (pos, align) = if right { (pos2(r.right() - 10.0, r.center().y), Align2::RIGHT_CENTER) } else { (pos2(r.left() + 4.0, r.center().y), Align2::LEFT_CENTER) };
-        let tr = ui.painter().text(pos, align, t(label), FontId::proportional(12.0), if sorted { ui.visuals().text_color() } else { pal.weak });
+        let (pos, align) = if right {
+            (pos2(r.right() - 10.0, r.center().y), Align2::RIGHT_CENTER)
+        } else {
+            (pos2(r.left() + 4.0, r.center().y), Align2::LEFT_CENTER)
+        };
+        let tr = ui.painter().text(
+            pos,
+            align,
+            t(label),
+            FontId::proportional(12.0),
+            if sorted {
+                ui.visuals().text_color()
+            } else {
+                pal.weak
+            },
+        );
         if sorted {
             // a small chevron after the label (before it for right-aligned columns)
-            let cx = if right { tr.left() - 9.0 } else { tr.right() + 9.0 };
+            let cx = if right {
+                tr.left() - 9.0
+            } else {
+                tr.right() + 9.0
+            };
             let rr = Rect::from_center_size(pos2(cx, r.center().y), Vec2::splat(10.0));
             if fv.descending {
                 ui.painter().add(egui::Shape::line(
-                    vec![pos2(rr.left(), rr.top() + 3.0), pos2(rr.center().x, rr.bottom() - 2.0), pos2(rr.right(), rr.top() + 3.0)],
+                    vec![
+                        pos2(rr.left(), rr.top() + 3.0),
+                        pos2(rr.center().x, rr.bottom() - 2.0),
+                        pos2(rr.right(), rr.top() + 3.0),
+                    ],
                     Stroke::new(1.5, pal.weak),
                 ));
             } else {
@@ -1349,9 +1440,16 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
             && let Some(k) = key
         {
             let f = if fv.sort == k {
-                crate::settings::FolderView { descending: !fv.descending, ..fv }
+                crate::settings::FolderView {
+                    descending: !fv.descending,
+                    ..fv
+                }
             } else {
-                crate::settings::FolderView { sort: k, descending: matches!(k, SortKey::Modified | SortKey::Size), ..fv }
+                crate::settings::FolderView {
+                    sort: k,
+                    descending: matches!(k, SortKey::Modified | SortKey::Size),
+                    ..fv
+                }
             };
             app.set_folder_view(p, f);
         }
@@ -1359,11 +1457,29 @@ fn details(app: &mut App, ui: &mut Ui, p: usize) {
         // it wider); a double click restores its width.
         if col != Col::Name {
             let edge = Rect::from_center_size(pos2(r.left(), r.center().y), vec2(8.0, r.height()));
-            let er = ui.interact(edge, ui.scope_id().with(("hdr-edge", p, label)), Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+            let er = ui
+                .interact(
+                    edge,
+                    ui.scope_id().with(("hdr-edge", p, label)),
+                    Sense::click_and_drag(),
+                )
+                .on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
             if er.hovered() || er.dragged() {
-                ui.painter().line_segment([pos2(r.left(), r.top() + 4.0), pos2(r.left(), r.bottom() - 4.0)], Stroke::new(2.0, theme::ACCENT));
+                ui.painter().line_segment(
+                    [
+                        pos2(r.left(), r.top() + 4.0),
+                        pos2(r.left(), r.bottom() - 4.0),
+                    ],
+                    Stroke::new(2.0, theme::ACCENT),
+                );
             } else {
-                ui.painter().line_segment([pos2(r.left(), r.top() + 6.0), pos2(r.left(), r.bottom() - 6.0)], Stroke::new(1.0, pal.separator));
+                ui.painter().line_segment(
+                    [
+                        pos2(r.left(), r.top() + 6.0),
+                        pos2(r.left(), r.bottom() - 6.0),
+                    ],
+                    Stroke::new(1.0, pal.separator),
+                );
             }
             let c = &mut app.settings.columns;
             let slot = match col {

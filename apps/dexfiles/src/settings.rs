@@ -109,7 +109,13 @@ pub struct Columns {
 
 impl Default for Columns {
     fn default() -> Self {
-        Columns { modified: 150.0, kind: 130.0, size: 90.0, folder: 200.0, row: 26.0 }
+        Columns {
+            modified: 150.0,
+            kind: 130.0,
+            size: 90.0,
+            folder: 200.0,
+            row: 26.0,
+        }
     }
 }
 
@@ -289,11 +295,18 @@ impl Settings {
 
     /// How `l` is shown: its remembered view, or the defaults.
     pub fn folder_view(&self, l: &Location) -> FolderView {
-        let default = FolderView { view: self.view, sort: self.sort, descending: self.sort_descending };
+        let default = FolderView {
+            view: self.view,
+            sort: self.sort,
+            descending: self.sort_descending,
+        };
         if !self.remember_folder_views {
             return default;
         }
-        self.folder_views.get(&folder_key(l)).copied().unwrap_or(default)
+        self.folder_views
+            .get(&folder_key(l))
+            .copied()
+            .unwrap_or(default)
     }
 
     /// Change how `l` is shown (remembered for it, or the defaults when not remembering).

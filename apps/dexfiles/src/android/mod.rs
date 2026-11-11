@@ -173,16 +173,52 @@ pub fn apps_for(ext: &str, mime: &str) -> Vec<crate::apps::AppInfo> {
             .as_str()
             .and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok())
             .and_then(|png| crate::apps::icon_from_png(&png));
-        out.push(crate::apps::AppInfo { id: id.to_owned(), label: a["label"].as_str().unwrap_or(id).to_owned(), icon });
+        out.push(crate::apps::AppInfo {
+            id: id.to_owned(),
+            label: a["label"].as_str().unwrap_or(id).to_owned(),
+            icon,
+        });
     }
     out
 }
 
 /// Open a file with one app (`package/activity`).
 pub fn open_with(path: &Path, app: &str) -> Result<(), String> {
-    let answer = call("open", json!({ "path": path.to_string_lossy(), "app": app }));
+    let answer = call(
+        "open",
+        json!({ "path": path.to_string_lossy(), "app": app }),
+    );
     match answer["error"].as_str() {
         Some(e) => Err(e.to_owned()),
         None => Ok(()),
     }
+}
+
+/// A video's frame (scaled to `max` pixels) and details, decoded by Android's media framework.
+pub fn video_frame(path: &Path, max: u32) -> Option<crate::preview::MediaInfo> {
+    use base64::Engine as _;
+    let answer = call(
+        "video_frame",
+        json!({ "path": path.to_string_lossy(), "max": max }),
+    );
+    if answer.get("error").is_some() || answer.as_object().is_none_or(|o| o.is_empty()) {
+        return None;
+    }
+    let image = answer["frame"]
+        .as_str()
+        .and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok())
+        .and_then(|png| crate::apps::icon_from_png(&png));
+    let mut info = Vec::new();
+    if let Some(ms) = answer["duration_ms"].as_u64() {
+        info.push(("media_duration", crate::preview::format_duration(ms / 1000)));
+    }
+    if let (Some(w), Some(h)) = (answer["width"].as_u64(), answer["height"].as_u64()) {
+        info.push(("media_resolution", format!("{w} × {h}")));
+    }
+    for (key, field) in [("media_title", "title"), ("media_artist", "artist")] {
+        if let Some(v) = answer[field].as_str().filter(|v| !v.is_empty()) {
+            info.push((key, v.to_owned()));
+        }
+    }
+    Some((image, info))
 }

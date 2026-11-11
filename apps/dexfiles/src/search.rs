@@ -229,7 +229,10 @@ impl Search {
     }
 
     pub fn count(&self) -> usize {
-        self.results.lock().unwrap_or_else(PoisonError::into_inner).len()
+        self.results
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .len()
     }
 
     pub fn snapshot(&self) -> Vec<Entry> {
@@ -282,7 +285,14 @@ fn content_matches(e: &Entry, needle: &str) -> bool {
 pub const MAX_RESULTS: usize = 20_000;
 
 /// Folders a search never enters (virtual file systems).
-const SKIP: &[&str] = &["/proc", "/sys", "/dev", "/run", "/storage/emulated/0/Android/data", "/storage/emulated/0/Android/obb"];
+const SKIP: &[&str] = &[
+    "/proc",
+    "/sys",
+    "/dev",
+    "/run",
+    "/storage/emulated/0/Android/data",
+    "/storage/emulated/0/Android/obb",
+];
 
 pub fn start(ctx: &egui::Context, root: Location, query: Query) -> Search {
     let search = Search {
@@ -302,14 +312,16 @@ pub fn start(ctx: &egui::Context, root: Location, query: Query) -> Search {
     };
     let done = search.done.clone();
     let ctx = ctx.clone();
-    let _ = std::thread::Builder::new().name("dexfiles-search".into()).spawn(move || {
-        match &root {
-            Location::Local(path) => search_local(path.clone(), &query, &shared),
-            _ => search_listing(root.clone(), &query, &shared),
-        }
-        done.store(true, Ordering::SeqCst);
-        ctx.request_repaint();
-    });
+    let _ = std::thread::Builder::new()
+        .name("dexfiles-search".into())
+        .spawn(move || {
+            match &root {
+                Location::Local(path) => search_local(path.clone(), &query, &shared),
+                _ => search_listing(root.clone(), &query, &shared),
+            }
+            done.store(true, Ordering::SeqCst);
+            ctx.request_repaint();
+        });
     search
 }
 
@@ -339,7 +351,10 @@ impl Shared {
             self.cancel.store(true, Ordering::Relaxed);
         }
         drop(r);
-        let mut last = self.last_repaint.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut last = self
+            .last_repaint
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if last.elapsed().as_millis() > 120 {
             *last = std::time::Instant::now();
             self.ctx.request_repaint();
@@ -350,7 +365,8 @@ impl Shared {
 /// Whether an entry is a hit (its metadata is known).
 fn is_hit(e: &Entry, query: &Query, meta_query: &Query, now: i64) -> bool {
     if query.content && !query.text.trim().is_empty() {
-        meta_query.matches_meta(e, now) && (name_matches(&e.name, &query.text) || content_matches(e, &query.text))
+        meta_query.matches_meta(e, now)
+            && (name_matches(&e.name, &query.text) || content_matches(e, &query.text))
     } else {
         query.matches_meta(e, now)
     }
@@ -365,7 +381,10 @@ fn search_local(root: std::path::PathBuf, query: &Query, shared: &Shared) {
         dirs: Vec<std::path::PathBuf>,
         busy: usize,
     }
-    let queue = Mutex::new(Queue { dirs: vec![root], busy: 0 });
+    let queue = Mutex::new(Queue {
+        dirs: vec![root],
+        busy: 0,
+    });
     let wake = Condvar::new();
     let now = chrono::Utc::now().timestamp();
     let mut meta_query = query.clone();
@@ -375,7 +394,10 @@ fn search_local(root: std::path::PathBuf, query: &Query, shared: &Shared) {
     let text = query.text.trim().to_owned();
     // Name-only queries can reject entries before looking at them closely.
     let name_gate = !text.is_empty() && !query.content;
-    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2).clamp(2, 6);
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(2)
+        .clamp(2, 6);
     std::thread::scope(|scope| {
         for _ in 0..threads {
             scope.spawn(|| {
@@ -424,11 +446,20 @@ fn search_local(root: std::path::PathBuf, query: &Query, shared: &Shared) {
                                 continue;
                             }
                             if let Some(c) = query.category
-                                && Category::of(&if is_dir { String::new() } else { vfs::extension(&name) }, is_dir) != c
+                                && Category::of(
+                                    &if is_dir {
+                                        String::new()
+                                    } else {
+                                        vfs::extension(&name)
+                                    },
+                                    is_dir,
+                                ) != c
                             {
                                 continue;
                             }
-                            let Ok(raw) = vfs::local::raw_entry(&item.path(), name) else { continue };
+                            let Ok(raw) = vfs::local::raw_entry(&item.path(), name) else {
+                                continue;
+                            };
                             let e = Entry::from_raw(&parent, raw);
                             if is_hit(&e, query, &meta_query, now) {
                                 batch.push(e);
@@ -462,7 +493,9 @@ fn search_listing(root: Location, query: &Query, shared: &Shared) {
         if shared.stopped() {
             break;
         }
-        let Ok(entries) = vfs::list(&dir) else { continue };
+        let Ok(entries) = vfs::list(&dir) else {
+            continue;
+        };
         for e in entries {
             shared.scanned.fetch_add(1, Ordering::Relaxed);
             if e.hidden && !query.include_hidden {
@@ -489,12 +522,21 @@ mod tests {
     fn speed() {
         let ctx = egui::Context::default();
         let t0 = std::time::Instant::now();
-        let q = Query { text: "lib".into(), recursive: true, ..Default::default() };
+        let q = Query {
+            text: "lib".into(),
+            recursive: true,
+            ..Default::default()
+        };
         let s = start(&ctx, Location::local("/usr"), q);
         while !s.is_done() {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
-        println!("{} found, {} looked at, in {:?}", s.count(), s.scanned.load(Ordering::Relaxed), t0.elapsed());
+        println!(
+            "{} found, {} looked at, in {:?}",
+            s.count(),
+            s.scanned.load(Ordering::Relaxed),
+            t0.elapsed()
+        );
     }
 
     #[test]

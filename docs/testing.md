@@ -20,7 +20,11 @@ informe.
    abierta. Compartir una foto desde la Galería a DexFiles: igual.
 8. Comprimir en ZIP y 7z, extraer, ver la lista en la vista previa.
 9. Red: un NAS por SMB, un servidor SFTP, Nextcloud por WebDAV (`/remote.php/dav/files/USUARIO`).
-10. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
+10. Fase 2: cambiar la vista de una carpeta y volver (la recuerda); ensanchar columnas en
+    *Detalles*; ver los tamaños de carpeta; escribir en la búsqueda (busca en subcarpetas);
+    *Abrir con…* y marcar «abrir siempre» (Ajustes ▸ Aplicaciones predeterminadas); vista previa
+    de un PDF, una canción con carátula y un vídeo; extraer un RAR; ZIP con contraseña.
+11. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
 
 ## Tests automáticos
 

@@ -20,7 +20,10 @@ pub fn mime_for(ext: &str) -> String {
         "7z" => "application/x-7z-compressed".to_owned(),
         "rar" => "application/vnd.rar".to_owned(),
         "md" | "log" | "rs" | "toml" | "kt" | "kts" | "conf" | "ini" => "text/plain".to_owned(),
-        _ => mime_guess::from_ext(ext).first().map(|m| m.essence_str().to_owned()).unwrap_or_else(|| "application/octet-stream".to_owned()),
+        _ => mime_guess::from_ext(ext)
+            .first()
+            .map(|m| m.essence_str().to_owned())
+            .unwrap_or_else(|| "application/octet-stream".to_owned()),
     }
 }
 
@@ -51,7 +54,10 @@ pub fn open_with(path: &Path, app: &str) -> Result<(), String> {
 /// Decode an icon handed over as PNG.
 pub fn icon_from_png(bytes: &[u8]) -> Option<egui::ColorImage> {
     let img = image::load_from_memory(bytes).ok()?.to_rgba8();
-    Some(egui::ColorImage::from_rgba_unmultiplied([img.width() as usize, img.height() as usize], img.as_raw()))
+    Some(egui::ColorImage::from_rgba_unmultiplied(
+        [img.width() as usize, img.height() as usize],
+        img.as_raw(),
+    ))
 }
 
 #[cfg_attr(target_os = "android", allow(dead_code))]
@@ -69,11 +75,14 @@ pub mod desktop {
 
     fn dirs() -> Vec<PathBuf> {
         let mut out = Vec::new();
-        let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
+        let data_home = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
         if let Some(d) = data_home {
             out.push(d.join("applications"));
         }
-        let data_dirs = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".to_owned());
+        let data_dirs = std::env::var("XDG_DATA_DIRS")
+            .unwrap_or_else(|_| "/usr/local/share:/usr/share".to_owned());
         for d in data_dirs.split(':').filter(|d| !d.is_empty()) {
             out.push(PathBuf::from(d).join("applications"));
         }
@@ -94,29 +103,50 @@ pub mod desktop {
             if !in_entry {
                 continue;
             }
-            let Some((k, v)) = line.split_once('=') else { continue };
+            let Some((k, v)) = line.split_once('=') else {
+                continue;
+            };
             let (k, v) = (k.trim(), v.trim());
             match k {
                 "Name" => name = Some(v.to_owned()),
                 "Exec" => exec = Some(v.to_owned()),
-                "MimeType" => mime = v.split(';').filter(|m| !m.is_empty()).map(str::to_owned).collect(),
+                "MimeType" => {
+                    mime = v
+                        .split(';')
+                        .filter(|m| !m.is_empty())
+                        .map(str::to_owned)
+                        .collect()
+                }
                 "NoDisplay" | "Hidden" if v == "true" => hidden = true,
                 "Type" if v != "Application" => hidden = true,
-                _ if !lang.is_empty() && k == format!("Name[{lang}]") => local_name = Some(v.to_owned()),
+                _ if !lang.is_empty() && k == format!("Name[{lang}]") => {
+                    local_name = Some(v.to_owned())
+                }
                 _ => {}
             }
         }
         if hidden {
             return None;
         }
-        Some(DesktopEntry { id: id.to_owned(), name: local_name.or(name)?, exec: exec?, mime_types: mime })
+        Some(DesktopEntry {
+            id: id.to_owned(),
+            name: local_name.or(name)?,
+            exec: exec?,
+            mime_types: mime,
+        })
     }
 
     pub fn entries() -> Vec<DesktopEntry> {
-        let lang = std::env::var("LANG").unwrap_or_default().chars().take_while(char::is_ascii_alphabetic).collect::<String>();
+        let lang = std::env::var("LANG")
+            .unwrap_or_default()
+            .chars()
+            .take_while(char::is_ascii_alphabetic)
+            .collect::<String>();
         let mut out: Vec<DesktopEntry> = Vec::new();
         for dir in dirs() {
-            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+            let Ok(rd) = std::fs::read_dir(&dir) else {
+                continue;
+            };
             for item in rd.flatten() {
                 let p = item.path();
                 if p.extension().and_then(|e| e.to_str()) != Some("desktop") {
@@ -126,7 +156,10 @@ pub mod desktop {
                 if out.iter().any(|e| e.id == id) {
                     continue; // the user's own file wins
                 }
-                if let Some(e) = std::fs::read_to_string(&p).ok().and_then(|t| parse(&id, &t, &lang)) {
+                if let Some(e) = std::fs::read_to_string(&p)
+                    .ok()
+                    .and_then(|t| parse(&id, &t, &lang))
+                {
                     out.push(e);
                 }
             }
@@ -139,9 +172,13 @@ pub mod desktop {
         let mut apps: Vec<AppInfo> = entries()
             .into_iter()
             .filter(|e| e.mime_types.iter().any(|m| m == mime || *m == family))
-            .map(|e| AppInfo { id: e.id, label: e.name, icon: None })
+            .map(|e| AppInfo {
+                id: e.id,
+                label: e.name,
+                icon: None,
+            })
             .collect();
-        apps.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+        apps.sort_by_key(|a| a.label.to_lowercase());
         apps
     }
 
@@ -190,10 +227,17 @@ pub mod desktop {
     }
 
     pub fn open_with(path: &Path, id: &str) -> Result<(), String> {
-        let entry = entries().into_iter().find(|e| e.id == id).ok_or_else(|| format!("{id}: not installed"))?;
+        let entry = entries()
+            .into_iter()
+            .find(|e| e.id == id)
+            .ok_or_else(|| format!("{id}: not installed"))?;
         let cmd = command(&entry.exec, path);
         let (prog, args) = cmd.split_first().ok_or_else(|| "empty Exec".to_owned())?;
-        std::process::Command::new(prog).args(args).spawn().map(|_| ()).map_err(|e| format!("{prog}: {e}"))
+        std::process::Command::new(prog)
+            .args(args)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| format!("{prog}: {e}"))
     }
 
     #[cfg(test)]
@@ -206,14 +250,24 @@ pub mod desktop {
             let e = parse("eog.desktop", text, "es").unwrap_or_else(|| unreachable!());
             assert_eq!(e.name, "Visor de imágenes");
             assert_eq!(e.mime_types, vec!["image/png", "image/jpeg"]);
-            assert!(parse("x.desktop", "[Desktop Entry]\nName=X\nExec=x\nNoDisplay=true\n", "").is_none());
+            assert!(
+                parse(
+                    "x.desktop",
+                    "[Desktop Entry]\nName=X\nExec=x\nNoDisplay=true\n",
+                    ""
+                )
+                .is_none()
+            );
         }
 
         #[test]
         fn exec_lines() {
             let p = Path::new("/tmp/a b.png");
             assert_eq!(command("eog %U", p), vec!["eog", "/tmp/a b.png"]);
-            assert_eq!(command("\"/opt/my app/run\" --open %f --icon %i", p), vec!["/opt/my app/run", "--open", "/tmp/a b.png", "--icon"]);
+            assert_eq!(
+                command("\"/opt/my app/run\" --open %f --icon %i", p),
+                vec!["/opt/my app/run", "--open", "/tmp/a b.png", "--icon"]
+            );
             assert_eq!(command("gimp", p), vec!["gimp", "/tmp/a b.png"]);
         }
     }

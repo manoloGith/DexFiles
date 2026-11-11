@@ -2,7 +2,7 @@
 //! `ring`'s, which builds with the NDK).
 
 mod ftp;
-mod sftp;
+pub mod sftp;
 mod smb;
 mod webdav;
 

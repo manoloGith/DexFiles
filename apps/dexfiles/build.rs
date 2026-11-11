@@ -5,6 +5,7 @@ use std::fmt::Write as _;
 
 fn main() {
     println!("cargo:rerun-if-changed=strings.tsv");
+    pthread_stub();
     let text = std::fs::read_to_string("strings.tsv").unwrap_or_default();
     let mut rows: Vec<(String, String, String)> = Vec::new();
     for (n, line) in text.lines().enumerate() {
@@ -44,4 +45,19 @@ fn main() {
     out.push(']');
     let dir = std::env::var("OUT_DIR").unwrap_or_else(|_| ".".into());
     let _ = std::fs::write(format!("{dir}/strings.in"), out);
+}
+
+/// unrar-sys (the `rar` feature) asks the linker for `-lpthread`, which Android doesn't have:
+/// threads are in its libc. An empty archive under that name satisfies the request.
+fn pthread_stub() {
+    let android = std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "android");
+    let rar = std::env::var_os("CARGO_FEATURE_RAR").is_some();
+    if !(android && rar) {
+        return;
+    }
+    let Ok(dir) = std::env::var("OUT_DIR") else { return };
+    let dir = std::path::PathBuf::from(dir).join("pthread-stub");
+    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::write(dir.join("libpthread.a"), b"!<arch>\n");
+    println!("cargo:rustc-link-search=native={}", dir.display());
 }

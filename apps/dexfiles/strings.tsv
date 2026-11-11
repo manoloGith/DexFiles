@@ -270,3 +270,18 @@ choose_app	Choose app…	Elegir app…
 archive_password_for	Password for “{}”	Contraseña de «{}»
 wrong_password	That password is not right.	La contraseña no es correcta.
 extract	Extract	Extraer
+n_pages	{} pages	{} páginas
+ssh_key	Private key	Clave privada
+ssh_key_hint	optional: path to id_ed25519… (the password unlocks it)	opcional: ruta a id_ed25519… (la contraseña la desbloquea)
+host_key_changed_text	The server's identity changed since the last connection. If you reinstalled it, trust the new key; otherwise someone may be in between.	La identidad del servidor ha cambiado desde la última conexión. Si lo has reinstalado, confía en la nueva clave; si no, puede que alguien se esté interponiendo.
+trust_new_key	Trust the new key	Confiar en la nueva clave
+media_title	Title	Título
+media_artist	Artist	Artista
+media_album	Album	Álbum
+media_genre	Genre	Género
+media_year	Year	Año
+media_duration	Duration	Duración
+media_bitrate	Bitrate	Tasa de bits
+media_sample_rate	Sample rate	Frecuencia de muestreo
+media_resolution	Resolution	Resolución
+preview_video_device	Video frames are shown on Android (the system decodes them).	Los fotogramas de vídeo se muestran en Android (los decodifica el sistema).

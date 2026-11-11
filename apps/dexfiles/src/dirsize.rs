@@ -53,14 +53,20 @@ impl DirSizes {
         for n in 0..2 {
             let shared = shared.clone();
             let ctx = ctx.clone();
-            let _ = std::thread::Builder::new().name(format!("dexfiles-size{n}")).spawn(move || worker(&shared, &ctx));
+            let _ = std::thread::Builder::new()
+                .name(format!("dexfiles-size{n}"))
+                .spawn(move || worker(&shared, &ctx));
         }
         DirSizes { shared }
     }
 
     /// The size if known; otherwise it is queued and `None` comes back for now.
     pub fn get(&self, path: &Path) -> Option<Size> {
-        let mut sizes = self.shared.sizes.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut sizes = self
+            .shared
+            .sizes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         match sizes.get(path) {
             Some(Slot::Done(size, at)) if at.elapsed() < FRESH => return Some(*size),
             Some(Slot::Done(size, _)) => {
@@ -82,19 +88,33 @@ impl DirSizes {
 
     /// The size if known, without asking for it.
     pub fn peek(&self, path: &Path) -> Option<Size> {
-        match self.shared.sizes.lock().unwrap_or_else(PoisonError::into_inner).get(path) {
+        match self
+            .shared
+            .sizes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(path)
+        {
             Some(Slot::Done(size, _)) => Some(*size),
             _ => None,
         }
     }
 
     fn enqueue(&self, path: &Path) {
-        let mut q = self.shared.queue.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut q = self
+            .shared
+            .queue
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         q.retain(|p| p != path);
         q.push_back(path.to_path_buf());
         while q.len() > MAX_QUEUE {
             if let Some(old) = q.pop_front() {
-                self.shared.sizes.lock().unwrap_or_else(PoisonError::into_inner).remove(&old);
+                self.shared
+                    .sizes
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .remove(&old);
             }
         }
         self.shared.wake.notify_one();
@@ -102,7 +122,11 @@ impl DirSizes {
 
     /// Something changed in `path`: forget its size and those of the folders above it.
     pub fn invalidate(&self, path: &Path) {
-        let mut sizes = self.shared.sizes.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut sizes = self
+            .shared
+            .sizes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         let mut cur = Some(path);
         while let Some(p) = cur {
             if matches!(sizes.get(p), Some(Slot::Done(..))) {
@@ -128,7 +152,8 @@ fn worker(shared: &Shared, ctx: &egui::Context) {
         };
         let Some(path) = path else { continue };
         // Another worker may have measured it as part of a bigger folder meanwhile.
-        if matches!(shared.sizes.lock().unwrap_or_else(PoisonError::into_inner).get(&path), Some(Slot::Done(_, at)) if at.elapsed() < FRESH) {
+        if matches!(shared.sizes.lock().unwrap_or_else(PoisonError::into_inner).get(&path), Some(Slot::Done(_, at)) if at.elapsed() < FRESH)
+        {
             continue;
         }
         let mut found = Vec::new();
@@ -169,18 +194,27 @@ pub fn measure(root: &Path, found: &mut Vec<(PathBuf, Size)>) -> Size {
                 }
             }
         }
-        Frame { path, children, next: 0, size }
+        Frame {
+            path,
+            children,
+            next: 0,
+            size,
+        }
     }
     let mut stack = vec![open(root.to_path_buf())];
     loop {
-        let Some(top) = stack.last_mut() else { return Size { bytes: 0, items: 0 } };
+        let Some(top) = stack.last_mut() else {
+            return Size { bytes: 0, items: 0 };
+        };
         if top.next < top.children.len() {
             let child = top.children[top.next].clone();
             top.next += 1;
             stack.push(open(child));
             continue;
         }
-        let Some(done) = stack.pop() else { return Size { bytes: 0, items: 0 } };
+        let Some(done) = stack.pop() else {
+            return Size { bytes: 0, items: 0 };
+        };
         match stack.last_mut() {
             Some(parent) => {
                 parent.size.bytes += done.size.bytes;
@@ -208,7 +242,16 @@ mod tests {
         let s = measure(r, &mut found);
         assert_eq!(s.bytes, 1110);
         assert_eq!(s.items, 6); // top.bin, a, x.bin, b, c, y.bin
-        let b = found.iter().find(|(p, _)| p.ends_with("a/b")).map(|(_, s)| *s);
-        assert_eq!(b, Some(Size { bytes: 1000, items: 2 }));
+        let b = found
+            .iter()
+            .find(|(p, _)| p.ends_with("a/b"))
+            .map(|(_, s)| *s);
+        assert_eq!(
+            b,
+            Some(Size {
+                bytes: 1000,
+                items: 2
+            })
+        );
     }
 }

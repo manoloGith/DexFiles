@@ -446,7 +446,8 @@ fn search_field(app: &mut App, ui: &mut Ui, p: usize) {
             }
             // …and, a moment after the last key, searches everything below it as well.
             if while_typing && text.trim().chars().count() >= 2 {
-                tab.search_due = Some(std::time::Instant::now() + std::time::Duration::from_millis(350));
+                tab.search_due =
+                    Some(std::time::Instant::now() + std::time::Duration::from_millis(350));
             }
         }
     }

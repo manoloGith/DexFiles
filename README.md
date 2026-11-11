@@ -12,7 +12,7 @@ cierre y reapertura fiables, y un informe de diagnóstico que se copia sin adb.
   direcciones editable; atrás/adelante/subir; pestañas; **dos paneles**; vista previa a la derecha.
 - **Red**: FTP/FTPS, SFTP, SMB 2/3 y WebDAV, en Rust puro.
 - **Operaciones**: copiar, cortar, pegar, renombrar, papelera o borrado permanente, nuevas
-  carpetas, en segundo plano con progreso; arrastrar y soltar; ZIP, 7z y TAR(.gz/.bz2/.xz);
+  carpetas, en segundo plano con progreso; arrastrar y soltar; ZIP y 7z (con contraseña), TAR(.gz/.bz2/.xz/.zst) y RAR (APK de GitHub);
   compartir y enviar por correo.
 - **Búsqueda**: filtro instantáneo y búsqueda en subcarpetas por nombre, contenido, tipo, fecha y
   tamaño.

@@ -44,6 +44,8 @@ tar = { version = "0.4", default-features = false }
 flate2 = "1"
 bzip2 = "0.6"
 ruzstd = "0.9"
+lofty = "0.25"
+hayro = { version = "0.9", features = ["embed-fonts"] }
 lzma-rust2 = { version = "0.25", features = ["xz"] }
 calamine = "0.38"
 quick-xml = "0.42"

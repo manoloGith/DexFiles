@@ -49,6 +49,7 @@ class MainActivity : CraftActivity() {
             "apps_for" -> JSONObject().put("apps", appsFor(args.getString("ext"), args.getString("mime"))).toString()
             "share" -> share(args.getJSONArray("paths"), args.optBoolean("email"))
             "media_scan" -> { mediaScan(args.getJSONArray("paths")); "{}" }
+            "video_frame" -> videoFrame(File(args.getString("path")), args.optInt("max", 512))
             else -> { Log.w(TAG, "files: unknown operation $op"); "{}" }
         }
     } catch (e: Exception) {
@@ -209,6 +210,31 @@ class MainActivity : CraftActivity() {
             }
         }
         return "{}"
+    }
+
+    /** A video's frame (a tenth in, scaled to [max] pixels) and details, for the preview. */
+    private fun videoFrame(file: File, max: Int): String {
+        val r = android.media.MediaMetadataRetriever()
+        try {
+            r.setDataSource(file.absolutePath)
+            val out = JSONObject()
+            val duration = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+            duration?.let { out.put("duration_ms", it) }
+            r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()?.let { out.put("width", it) }
+            r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()?.let { out.put("height", it) }
+            r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE)?.let { out.put("title", it) }
+            r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST)?.let { out.put("artist", it) }
+            val at = (duration ?: 0L) * 100 // microseconds: a tenth of the way in
+            val frame = r.getScaledFrameAtTime(at, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC, max, max)
+            if (frame != null) {
+                val bytes = java.io.ByteArrayOutputStream()
+                frame.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bytes)
+                out.put("frame", android.util.Base64.encodeToString(bytes.toByteArray(), android.util.Base64.NO_WRAP))
+            }
+            return out.toString()
+        } finally {
+            runCatching { r.release() }
+        }
     }
 
     private fun mediaScan(paths: JSONArray) {

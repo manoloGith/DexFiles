@@ -489,7 +489,15 @@ impl App {
                     if key == self.preview.key {
                         self.preview.loading = false;
                         self.preview.texture = None;
-                        if let crate::preview::Content::Image { image, .. } = &content {
+                        let picture = match &content {
+                            crate::preview::Content::Image { image, .. }
+                            | crate::preview::Content::Pdf { image, .. } => Some(image),
+                            crate::preview::Content::Media {
+                                image: Some(image), ..
+                            } => Some(image),
+                            _ => None,
+                        };
+                        if let Some(image) = picture {
                             self.preview.texture = Some(self.ctx.load_texture(
                                 "preview",
                                 image.clone(),
@@ -546,7 +554,12 @@ impl App {
             });
         }
         if let Some((archive, dest, wrong)) = password {
-            self.dialog = Some(Dialog::ArchivePassword { archive, dest, wrong, text: String::new() });
+            self.dialog = Some(Dialog::ArchivePassword {
+                archive,
+                dest,
+                wrong,
+                text: String::new(),
+            });
         }
         if touched.is_empty() {
             return;
@@ -641,7 +654,11 @@ impl App {
     /// system's (`chooser`: the system's own app chooser).
     pub fn open_file(&mut self, location: Location, chooser: bool) {
         let ext = vfs::extension(&location.name());
-        let app = if chooser { None } else { self.settings.default_app(&ext).map(|d| d.app.clone()) };
+        let app = if chooser {
+            None
+        } else {
+            self.settings.default_app(&ext).map(|d| d.app.clone())
+        };
         self.launch(location, app, chooser);
     }
 
@@ -665,12 +682,14 @@ impl App {
             Location::Local(p) => open(&p, &tx),
             remote => {
                 self.say(tf("downloading", remote.name()));
-                let _ = std::thread::Builder::new().name("dexfiles-open".into()).spawn(move || match vfs::local_copy(&remote, &mut |_| true) {
-                    Ok(p) => open(&p, &tx),
-                    Err(e) => {
-                        let _ = tx.send(Msg::Status(tf("cant_open", e)));
-                    }
-                });
+                let _ = std::thread::Builder::new()
+                    .name("dexfiles-open".into())
+                    .spawn(move || match vfs::local_copy(&remote, &mut |_| true) {
+                        Ok(p) => open(&p, &tx),
+                        Err(e) => {
+                            let _ = tx.send(Msg::Status(tf("cant_open", e)));
+                        }
+                    });
             }
         }
     }
@@ -894,7 +913,11 @@ impl App {
                 } else {
                     parent
                 };
-                self.start_job(JobKind::Extract { archive, dest, password: None });
+                self.start_job(JobKind::Extract {
+                    archive,
+                    dest,
+                    password: None,
+                });
             }
             Action::Share(items, email) => self.share(items, email),
             Action::OpenWith(l) => {
@@ -1002,7 +1025,10 @@ impl App {
             }
             Action::SetView(v) => {
                 let p = self.active_pane;
-                let f = FolderView { view: v, ..self.folder_view(p) };
+                let f = FolderView {
+                    view: v,
+                    ..self.folder_view(p)
+                };
                 self.set_folder_view(p, f);
                 self.tab_mut(p).scroll_to_cursor = true;
             }
@@ -1082,7 +1108,9 @@ impl App {
             for tab in &mut self.panes[p].tabs {
                 if let Some(s) = &tab.search {
                     let n = s.count();
-                    if n > tab.search_results.len() && tab.last_check.elapsed() > Duration::from_millis(150) {
+                    if n > tab.search_results.len()
+                        && tab.last_check.elapsed() > Duration::from_millis(150)
+                    {
                         let new = s.take_from(tab.search_results.len());
                         tab.search_results.extend(new);
                         tab.dirty = true;
@@ -1618,14 +1646,20 @@ impl App {
         let with_sizes = self.settings.folder_sizes;
         let size_of = move |e: &Entry| -> u64 {
             if e.is_dir() {
-                if with_sizes && let Some(p) = e.location.as_local() { sizes.peek(p).map(|s| s.bytes).unwrap_or(0) } else { 0 }
+                if with_sizes && let Some(p) = e.location.as_local() {
+                    sizes.peek(p).map(|s| s.bytes).unwrap_or(0)
+                } else {
+                    0
+                }
             } else {
                 e.size
             }
         };
         for pi in 0..2 {
             for ti in 0..self.panes[pi].tabs.len() {
-                let f = self.settings.folder_view(self.panes[pi].tabs[ti].location());
+                let f = self
+                    .settings
+                    .folder_view(self.panes[pi].tabs[ti].location());
                 let t = &mut self.panes[pi].tabs[ti];
                 if t.dirty || (sizes_changed && f.sort == SortKey::Size) {
                     t.refresh_visible(f.sort, f.descending, ff, hidden, &size_of);

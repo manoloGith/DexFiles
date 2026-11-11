@@ -15,12 +15,12 @@ servidor real · ⏳ fase siguiente.
 | Requisito | Estado | Cómo |
 |---|---|---|
 | Panel de navegación jerárquico | ✅ | Barra lateral: Favoritos, Dispositivos (cada volumen se despliega como árbol de carpetas, con barra de ocupación), Red, Papelera. Todo es destino de arrastre. |
-| Unidades de red FTP/SFTP/SMB/WebDAV | ✅ FTP, WebDAV · 🟡 FTPS, SFTP, SMB | *Conectar a servidor…* o escribir `sftp://usuario@host/ruta` en la barra de direcciones. Todo Rust (suppaftp, russh + russh-sftp, smb-rs, ureq). Contraseña recordada o solo para la sesión. SFTP con *trust on first use* de la clave del host. |
+| Unidades de red FTP/SFTP/SMB/WebDAV | ✅ FTP, WebDAV · 🟡 FTPS, SFTP, SMB | *Conectar a servidor…* o escribir `sftp://usuario@host/ruta` en la barra de direcciones. Todo Rust (suppaftp, russh + russh-sftp, smb-rs, ureq). Contraseña recordada o solo para la sesión. SFTP con contraseña o **clave privada** (OpenSSH/PEM, con frase de paso), *trust on first use* de la clave del host y botón **«Confiar en la nueva clave»** si cambia. |
 | Barra de direcciones | ✅ | Migas de pan clicables (y destino de arrastre); clic en el hueco o Ctrl+L para escribir una ruta o URL; botón para copiarla. |
 | Atrás / Adelante / Subir | ✅ | Botones, Alt+←/→/↑, Retroceso, botones laterales del ratón; en Android, *Atrás* del sistema vuelve atrás y solo cierra desde la primera carpeta. |
 | Pestañas | ✅ | Ctrl+T, Ctrl+W, Ctrl+Tab, clic central en una carpeta, *Abrir en pestaña nueva*. Soltar archivos sobre una pestaña los lleva a su carpeta. |
 | Favoritos | ✅ | Carpetas estándar al primer arranque; *Añadir a favoritos* o arrastrar una carpeta bajo la lista; reordenar y quitar desde su menú. |
-| Panel de vista previa | ✅ imágenes, texto/código, DOCX/ODT/PPTX/ODP (texto), XLSX/XLS/ODS/CSV (tabla), archivos comprimidos (lista), carpetas · ⏳ PDF | Panel derecho redimensionable + *Vista rápida* con Espacio. PDF: fase 2 (con `hayro`, el renderizador de PdfCraft). |
+| Panel de vista previa | ✅ imágenes, PDF (primera página, con `hayro`), texto/código, DOCX/ODT/PPTX/ODP (texto), XLSX/XLS/ODS/CSV (tabla), audio (etiquetas y carátula, `lofty`), archivos comprimidos (lista), carpetas · 🟡 vídeo (fotograma con `MediaMetadataRetriever`, solo Android) | Panel derecho redimensionable + *Vista rápida* con Espacio. Miniaturas de imágenes, PDF, carátulas y vídeos. |
 | Dos paneles | ✅ | F3 o el botón; cada panel con sus pestañas; Tab cambia de panel; *Copiar/Mover al otro panel*. |
 
 ### 2. Gestión y operaciones
@@ -30,17 +30,19 @@ servidor real · ⏳ fase siguiente.
 | Copiar, cortar, pegar, renombrar | ✅ | Ctrl+C/X/V, F2, menús. Entre cualquier par de ubicaciones (local ↔ servidor ↔ servidor). En segundo plano con progreso, cancelación y pregunta ante nombres repetidos (reemplazar / combinar / conservar ambos / omitir, «para todos»). |
 | Eliminar: papelera o permanente | ✅ | Supr = papelera (especificación freedesktop; en Linux es la del sistema; en Android `.Trash-dexfiles` en cada volumen), Mayús+Supr = permanente (con confirmación). Papelera navegable: restaurar, eliminar, vaciar. En servidores no hay papelera: se avisa. |
 | Nueva carpeta / nuevo archivo | ✅ | Ctrl+Mayús+N, menú del fondo. |
-| Búsqueda y filtros | ✅ | Escribir filtra la carpeta al instante; Intro busca en subcarpetas (en segundo plano, resultados en directo). Filtros: nombre o contenido (texto, código y documentos de oficina), tipo, fecha de modificación, tamaño. Comodines `*` y `?`, sin distinguir mayúsculas ni acentos. |
+| Búsqueda y filtros | ✅ | Escribir filtra la carpeta al instante y, tras una pausa, busca en todas las subcarpetas (asíncrona: varios hilos recorren las carpetas en paralelo con `read_dir`, sin `stat` salvo para los candidatos; resultados por lotes; 97 000 entradas en < 1 s en un PC). Filtros: nombre o contenido (texto, código y documentos de oficina), tipo, fecha de modificación, tamaño. Comodines `*` y `?`, sin distinguir mayúsculas ni acentos. |
 | Arrastrar y soltar | ✅ | Entre paneles, sobre carpetas, pestañas, migas de pan, la barra lateral y la papelera. Mismo disco = mover, otro = copiar; Ctrl copia, Mayús mueve. Desde otras apps (DeX, pantalla dividida): se copian a la carpeta abierta. Selección por rectángulo. |
-| Compresión | ✅ | Ver [compression.md](compression.md): ZIP, 7z, TAR(.gz/.bz2/.xz); RAR, propuesta. |
+| Compresión | ✅ | Ver [compression.md](compression.md): ZIP y 7z (con contraseña AES-256), TAR(.gz/.bz2/.xz/.zst), .zst; RAR (extraer, con contraseña) solo en los APK de GitHub (*feature* `rar`). |
 | Compartir | 🟡 | *Compartir…* (hoja de compartir de Android, varias apps) y *Enviar por correo* (solo apps de correo, como adjuntos). Los archivos de servidores se descargan antes. |
 
 ### 3. Visualización y personalización
 
 | Requisito | Estado | Cómo |
 |---|---|---|
-| Vistas | ✅ | Iconos grandes, medianos, pequeños, lista, detalles, contenido (Ctrl+1…6). Miniaturas de imágenes en segundo plano. |
-| Ordenar | ✅ | Nombre (orden natural: «2» antes de «10»), fecha, tipo, tamaño, estado (solo lectura/oculto/enlace); ascendente/descendente; carpetas primero. Clic en las columnas de *Detalles*. |
+| Vistas | ✅ | Iconos grandes, medianos, pequeños, lista, detalles, contenido (Ctrl+1…6). **Cada carpeta recuerda su vista y su orden.** En *Detalles*, las columnas se ensanchan o estrechan arrastrando su borde (doble clic: restablecer), se ocultan desde el menú de la cabecera, y la altura de las filas es ajustable; el nombre ocupa el resto del ancho. |
+| Ordenar | ✅ | Nombre (orden natural: «2» antes de «10»), fecha, tipo, tamaño (las carpetas por su contenido), estado (solo lectura/oculto/enlace); ascendente/descendente; carpetas primero. |
+| Tamaño de carpetas | ✅ | Calculado en segundo plano (dos hilos, recorrido de abajo arriba que guarda el de cada subcarpeta), en caché y recalculado cuando la app cambia algo dentro. En las vistas, la vista previa y la suma de la selección. Solo carpetas locales. |
+| Aplicaciones predeterminadas | ✅ escritorio · 🟡 Android | Propias de DexFiles, no del sistema: *Abrir con…* muestra las apps (con iconos en Android) y «abrir siempre .ext con esta app»; *Ajustes ▸ Aplicaciones predeterminadas* las lista, cambia, quita o añade por extensión. |
 | Ocultos | ✅ | Ctrl+H o ajustes (archivos con punto y atributos ocultos/sistema de SMB). |
 | Extensiones | ✅ | Ajuste *Mostrar extensiones*. Con ellas ocultas, renombrar solo cambia el nombre; con ellas visibles, se preselecciona el nombre sin la extensión y se avisa si cambia. |
 | Configuración de inicio | ✅ | Carpeta de inicio, Descargas, una carpeta concreta o las pestañas de la última vez. |
@@ -53,7 +55,7 @@ teclado para saltar a un nombre, vigilancia de cambios en la carpeta abierta.
 
 | Fase | Contenido |
 |---|---|
-| 2 | Vista previa de PDF (hayro), audio/vídeo (metadatos y carátula), RAR (según elijas), .zst, archivos con contraseña, «confiar en la nueva clave» de SFTP, claves SSH, comprimir/extraer en servidores |
+| 2 ✅ | Memoria de vista por carpeta, columnas redimensionables, tamaño de carpetas, búsqueda paralela mientras se escribe, apps predeterminadas propias, PDF, audio y vídeo, RAR (*feature*), .zst, contraseñas en archivos, claves SSH y «confiar en la nueva clave» de SFTP. Pendiente de la fase 2: comprimir/extraer directamente en servidores (ahora se hace en local) |
 | 3 | Arrastrar *desde* DexFiles a otras apps (`startDragAndDrop`), portapapeles de archivos entre apps, etiquetas de color, renombrado por lotes |
 | 4 | Release firmado, F-Droid/Obtainium (como DexPdfCraft fase 7), integración en craft-android de lo que sirva a otras apps (volúmenes, abrir con, compartir) |
 

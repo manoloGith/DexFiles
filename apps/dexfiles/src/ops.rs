@@ -340,14 +340,20 @@ fn run(state: &JobState, kind: JobKind) {
                 .iter()
                 .filter_map(|l| l.as_local().map(PathBuf::from))
                 .collect();
-            let r = crate::archive::compress(&paths, target, format, password.as_deref(), &mut |done, total, name| {
-                state.update(|s| {
-                    s.done_bytes = done;
-                    s.total_bytes = total;
-                    s.current = name.to_owned();
-                });
-                !state.cancelled()
-            });
+            let r = crate::archive::compress(
+                &paths,
+                target,
+                format,
+                password.as_deref(),
+                &mut |done, total, name| {
+                    state.update(|s| {
+                        s.done_bytes = done;
+                        s.total_bytes = total;
+                        s.current = name.to_owned();
+                    });
+                    !state.cancelled()
+                },
+            );
             match r {
                 Ok(()) => state.update(|s| s.created.push(dest.clone())),
                 Err(e) => {
@@ -359,7 +365,11 @@ fn run(state: &JobState, kind: JobKind) {
             }
             state.touch(dest.parent());
         }
-        JobKind::Extract { archive, dest, password } => {
+        JobKind::Extract {
+            archive,
+            dest,
+            password,
+        } => {
             let local = match vfs::local_copy(&archive, &mut |_| !state.cancelled()) {
                 Ok(p) => p,
                 Err(e) => return state.error(&archive.name(), &e),
@@ -371,18 +381,25 @@ fn run(state: &JobState, kind: JobKind) {
                 );
                 return;
             };
-            let r = crate::archive::extract(&local, target, password.as_deref(), &mut |done, total, name| {
-                state.update(|s| {
-                    s.done_bytes = done;
-                    s.total_bytes = total;
-                    s.current = name.to_owned();
-                });
-                !state.cancelled()
-            });
+            let r = crate::archive::extract(
+                &local,
+                target,
+                password.as_deref(),
+                &mut |done, total, name| {
+                    state.update(|s| {
+                        s.done_bytes = done;
+                        s.total_bytes = total;
+                        s.current = name.to_owned();
+                    });
+                    !state.cancelled()
+                },
+            );
             if let Err(e) = r {
                 if crate::archive::needs_password(&e) {
                     let wrong = crate::archive::wrong_password(&e);
-                    state.update(|s| s.password_needed = Some((archive.clone(), dest.clone(), wrong)));
+                    state.update(|s| {
+                        s.password_needed = Some((archive.clone(), dest.clone(), wrong))
+                    });
                 } else if !vfs::is_cancelled(&e) {
                     state.error(&archive.name(), &e);
                 }

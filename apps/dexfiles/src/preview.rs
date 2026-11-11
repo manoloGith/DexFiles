@@ -17,6 +17,17 @@ pub enum Content {
         width: u32,
         height: u32,
     },
+    /// Audio or video: its picture (cover art, a video frame) and what is known about it.
+    Media {
+        image: Option<egui::ColorImage>,
+        /// (i18n key, value)
+        info: Vec<(&'static str, String)>,
+    },
+    /// A PDF's first page, and how many pages it has.
+    Pdf {
+        image: egui::ColorImage,
+        pages: usize,
+    },
     Text {
         text: String,
         truncated: bool,
@@ -81,7 +92,122 @@ fn decodable_image(ext: &str) -> bool {
 }
 
 /// A thumbnail (`size` pixels at most), for images.
+/// PDFs bigger than this are not previewed (they are read whole).
+const PDF_LIMIT: usize = 120 * 1024 * 1024;
+
+/// A PDF's first page as an image fitting `max` pixels, and its page count (hayro, the pure
+/// Rust renderer PdfCraft uses).
+pub fn render_pdf(bytes: Vec<u8>, max: u32) -> Result<(egui::ColorImage, usize), String> {
+    use hayro::hayro_interpret::InterpreterSettings;
+    use hayro::hayro_syntax::Pdf;
+    let pdf = Pdf::new(bytes).map_err(|e| format!("{e:?}"))?;
+    let pages = pdf.pages();
+    let count = pages.len();
+    let page = pages.first().ok_or_else(|| "no pages".to_owned())?;
+    let (w, h) = page.render_dimensions();
+    let scale = (max as f32 / w.max(h).max(1.0)).min(3.0);
+    let cache = hayro::RenderCache::new();
+    let pixmap_settings = hayro::PixmapSettings {
+        x_scale: scale,
+        y_scale: scale,
+        bg_color: hayro::vello_cpu::color::palette::css::WHITE,
+    };
+    let pixmap = hayro::render(
+        page,
+        &cache,
+        &InterpreterSettings::default(),
+        &hayro::RenderSettings::default(),
+        &pixmap_settings,
+    );
+    let size = [pixmap.width() as usize, pixmap.height() as usize];
+    Ok((
+        egui::ColorImage::from_rgba_premultiplied(size, pixmap.data_as_u8_slice()),
+        count,
+    ))
+}
+
+/// A picture (cover art, a frame) and (i18n key, value) details of an audio or video file.
+pub type MediaInfo = (Option<egui::ColorImage>, Vec<(&'static str, String)>);
+
+/// An audio file's tags and cover art (lofty: MP3, FLAC, Ogg, Opus, M4A, WAV, AIFF…).
+pub fn audio(path: &Path, max: u32) -> Option<MediaInfo> {
+    use lofty::prelude::*;
+    let file = lofty::read_from_path(path).ok()?;
+    let props = file.properties();
+    let mut info = Vec::new();
+    let tag = file.primary_tag().or_else(|| file.first_tag());
+    if let Some(tag) = tag {
+        for (key, value) in [
+            ("media_title", tag.title()),
+            ("media_artist", tag.artist()),
+            ("media_album", tag.album()),
+            ("media_genre", tag.genre()),
+        ] {
+            if let Some(v) = value.filter(|v| !v.trim().is_empty()) {
+                info.push((key, v.into_owned()));
+            }
+        }
+        if let Some(y) = tag.date() {
+            info.push(("media_year", y.year.to_string()));
+        }
+    }
+    info.push((
+        "media_duration",
+        format_duration(props.duration().as_secs()),
+    ));
+    if let Some(b) = props.audio_bitrate() {
+        info.push(("media_bitrate", format!("{b} kbps")));
+    }
+    if let Some(r) = props.sample_rate() {
+        info.push((
+            "media_sample_rate",
+            format!("{:.1} kHz", f64::from(r) / 1000.0),
+        ));
+    }
+    let cover = tag
+        .and_then(|t| t.pictures().first())
+        .and_then(|p| decode_image(p.data(), max).ok())
+        .map(|(i, _, _)| i);
+    Some((cover, info))
+}
+
+pub fn format_duration(secs: u64) -> String {
+    let (h, m, s) = (secs / 3600, secs / 60 % 60, secs % 60);
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
+}
+
+/// A video's frame and details: the system decodes it on Android; elsewhere nothing.
+pub fn video(path: &Path, max: u32) -> Option<MediaInfo> {
+    #[cfg(target_os = "android")]
+    {
+        crate::android::video_frame(path, max)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (path, max);
+        None
+    }
+}
+
 pub fn thumbnail(entry: &Entry, size: u32) -> Option<egui::ColorImage> {
+    let cat = Category::of(&entry.ext, false);
+    if matches!(cat, Category::Audio | Category::Video) {
+        let path = entry.location.as_local()?;
+        let found = if cat == Category::Audio {
+            audio(path, size)
+        } else {
+            video(path, size)
+        };
+        return found.and_then(|(img, _)| img);
+    }
+    if entry.ext == "pdf" && entry.size as usize <= PDF_LIMIT {
+        let bytes = read(entry, PDF_LIMIT).ok()?;
+        return render_pdf(bytes, size).ok().map(|(i, _)| i);
+    }
     if !decodable_image(&entry.ext) || entry.size as usize > IMAGE_LIMIT {
         return None;
     }
@@ -363,7 +489,34 @@ pub fn load(entry: &Entry, max_px: u32) -> Content {
                 },
             }
         }
-        Category::Pdf => Content::None("preview_pdf_later"),
+        Category::Audio | Category::Video => {
+            let path = match vfs::local_copy(&entry.location, &mut |n| n < 300 * 1024 * 1024) {
+                Ok(p) => p,
+                Err(e) => return Content::Error(e.to_string()),
+            };
+            let found = if cat == Category::Audio {
+                audio(&path, max_px.min(800))
+            } else {
+                video(&path, max_px.min(1200))
+            };
+            match found {
+                Some((image, info)) => Content::Media { image, info },
+                None if cat == Category::Video => Content::None("preview_video_device"),
+                None => Content::None("preview_unsupported"),
+            }
+        }
+        Category::Pdf => {
+            if entry.size as usize > PDF_LIMIT {
+                return Content::None("preview_too_big");
+            }
+            match read(entry, PDF_LIMIT)
+                .map_err(|e| e.to_string())
+                .and_then(|b| render_pdf(b, max_px.min(1400)))
+            {
+                Ok((image, pages)) => Content::Pdf { image, pages },
+                Err(e) => Content::Error(e),
+            }
+        }
         _ => {
             // Unknown types: show them as text if they look like text.
             if entry.size > 0
@@ -386,6 +539,32 @@ pub fn load(entry: &Entry, max_px: u32) -> Content {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn audio_details() {
+        // two seconds of silence, 8 kHz mono 16-bit
+        let dir = tempfile::tempdir().unwrap_or_else(|_| unreachable!());
+        let path = dir.path().join("tone.wav");
+        let samples = 16_000u32;
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + samples * 2).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&8000u32.to_le_bytes());
+        wav.extend_from_slice(&16000u32.to_le_bytes());
+        wav.extend_from_slice(&2u16.to_le_bytes());
+        wav.extend_from_slice(&16u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(samples * 2).to_le_bytes());
+        wav.resize(wav.len() + samples as usize * 2, 0);
+        std::fs::write(&path, wav).unwrap_or_default();
+        let (_, info) = audio(&path, 100).unwrap_or_else(|| unreachable!());
+        assert!(info.contains(&("media_duration", "0:02".to_owned())), "{info:?}");
+        assert!(info.iter().any(|(k, v)| *k == "media_sample_rate" && v.starts_with("8")), "{info:?}");
+    }
 
     #[test]
     fn csv_cells() {

@@ -41,6 +41,9 @@ impl russh::client::Handler for Client {
     }
 }
 
+/// The start of the error when a server shows another key than the one recorded.
+pub const HOST_KEY_CHANGED: &str = "The server's SSH host key has changed";
+
 fn known_hosts_file() -> std::path::PathBuf {
     crate::platform::data_dir().join("known_hosts.txt")
 }
@@ -62,7 +65,6 @@ fn known_hosts_check(host: &str, fingerprint: &str) -> bool {
 }
 
 /// Forget a server's recorded key (after the user accepts a new one).
-#[allow(dead_code)] // for a "trust the new key" button (phase 2)
 pub fn forget_host(host: &str, port: u16) {
     let key = format!("{host}:{port}");
     let file = known_hosts_file();
@@ -107,18 +109,33 @@ impl SftpFs {
                     }
                     Ok(Err(e)) => {
                         if mismatch.load(std::sync::atomic::Ordering::SeqCst) {
-                            return Err(vfs::other(format!(
-                                "HOST KEY CHANGED for {host}: refusing to connect"
-                            )));
+                            return Err(vfs::other(format!("{HOST_KEY_CHANGED} ({host})")));
                         }
                         return Err(err(e));
                     }
                     Ok(Ok(h)) => h,
                 };
-            let auth = handle
-                .authenticate_password(server.user.clone(), server.password.clone())
-                .await
-                .map_err(err)?;
+            // A private key when one is given (the password then unlocks it), else the password.
+            let auth = if server.key_path.trim().is_empty() {
+                handle
+                    .authenticate_password(server.user.clone(), server.password.clone())
+                    .await
+                    .map_err(err)?
+            } else {
+                let passphrase = (!server.password.is_empty()).then_some(server.password.as_str());
+                let key = russh::keys::load_secret_key(server.key_path.trim(), passphrase)
+                    .map_err(|e| vfs::other(format!("SSH key: {e}")))?;
+                let hash = handle
+                    .best_supported_rsa_hash()
+                    .await
+                    .map_err(err)?
+                    .flatten();
+                let key = russh::keys::PrivateKeyWithHashAlg::new(Arc::new(key), hash);
+                handle
+                    .authenticate_publickey(server.user.clone(), key)
+                    .await
+                    .map_err(err)?
+            };
             if !auth.success() {
                 return Err(io::Error::new(
                     io::ErrorKind::PermissionDenied,

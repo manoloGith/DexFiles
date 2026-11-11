@@ -155,12 +155,23 @@ impl Dialog {
     pub fn open_with(ext: String, file: Option<Location>) -> Dialog {
         let apps = Arc::new(std::sync::Mutex::new(None));
         let (slot, e) = (apps.clone(), ext.clone());
-        let _ = std::thread::Builder::new().name("dexfiles-apps".into()).spawn(move || {
-            let list = crate::apps::apps_for(&e);
-            *slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(list);
-        });
+        let _ = std::thread::Builder::new()
+            .name("dexfiles-apps".into())
+            .spawn(move || {
+                let list = crate::apps::apps_for(&e);
+                *slot
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(list);
+            });
         let from_settings = file.is_none();
-        Dialog::OpenWith(Box::new(OpenWith { ext, file, apps, icons: Default::default(), remember: from_settings, from_settings }))
+        Dialog::OpenWith(Box::new(OpenWith {
+            ext,
+            file,
+            apps,
+            icons: Default::default(),
+            remember: from_settings,
+            from_settings,
+        }))
     }
 
     pub fn password(id: ServerId) -> Dialog {
@@ -394,19 +405,32 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             }
             keep && !close
         }
-        Dialog::ArchivePassword { archive, dest, wrong, text } => {
+        Dialog::ArchivePassword {
+            archive,
+            dest,
+            wrong,
+            text,
+        } => {
             let mut keep = true;
             let close = modal(ctx, "archive-password", 400.0, |ui| {
                 ui.heading(tf("archive_password_for", archive.name()));
                 if *wrong {
                     ui.colored_label(ui.visuals().error_fg_color, t("wrong_password"));
                 }
-                let r = ui.add(egui::TextEdit::singleline(text).password(true).desired_width(f32::INFINITY));
+                let r = ui.add(
+                    egui::TextEdit::singleline(text)
+                        .password(true)
+                        .desired_width(f32::INFINITY),
+                );
                 r.request_focus();
                 let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 let (ok, cancel) = buttons(ui, t("extract"), false);
                 if ok || enter {
-                    app.start_job(crate::ops::JobKind::Extract { archive: archive.clone(), dest: dest.clone(), password: Some(std::mem::take(text)) });
+                    app.start_job(crate::ops::JobKind::Extract {
+                        archive: archive.clone(),
+                        dest: dest.clone(),
+                        password: Some(std::mem::take(text)),
+                    });
                     keep = false;
                 }
                 if cancel {
@@ -443,7 +467,12 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 if format.supports_password() {
                     ui.horizontal(|ui| {
                         ui.label(t("password"));
-                        ui.add(egui::TextEdit::singleline(password).password(true).hint_text(t("optional")).desired_width(200.0));
+                        ui.add(
+                            egui::TextEdit::singleline(password)
+                                .password(true)
+                                .hint_text(t("optional"))
+                                .desired_width(200.0),
+                        );
                     });
                 }
                 ui.small(t("compress_formats_hint"));
@@ -460,7 +489,8 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                         sources: items.clone(),
                         dest: parent.join(&file),
                         format: *format,
-                        password: (!password.is_empty() && format.supports_password()).then(|| password.clone()),
+                        password: (!password.is_empty() && format.supports_password())
+                            .then(|| password.clone()),
                     });
                     keep = false;
                 }
@@ -513,7 +543,11 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
 fn open_with_dialog(app: &mut App, ctx: &egui::Context, st: &mut OpenWith) -> bool {
     let mut keep = true;
     let pal = theme::palette(app.dark);
-    let loaded = st.apps.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+    let loaded = st
+        .apps
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
     if loaded.is_none() {
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
     }
@@ -538,37 +572,68 @@ fn open_with_dialog(app: &mut App, ctx: &egui::Context, st: &mut OpenWith) -> bo
                 ui.label(RichText::new(t("no_apps_found")).color(pal.weak));
             }
             Some(list) => {
-                egui::ScrollArea::vertical().max_height(340.0).show(ui, |ui| {
-                    for a in list {
-                        let tex = match (&a.icon, st.icons.get(&a.id)) {
-                            (_, Some(t)) => Some(t.clone()),
-                            (Some(img), None) => {
-                                let t = ctx.load_texture(format!("app-{}", a.id), img.clone(), egui::TextureOptions::LINEAR);
-                                st.icons.insert(a.id.clone(), t.clone());
-                                Some(t)
+                egui::ScrollArea::vertical()
+                    .max_height(340.0)
+                    .show(ui, |ui| {
+                        for a in list {
+                            let tex = match (&a.icon, st.icons.get(&a.id)) {
+                                (_, Some(t)) => Some(t.clone()),
+                                (Some(img), None) => {
+                                    let t = ctx.load_texture(
+                                        format!("app-{}", a.id),
+                                        img.clone(),
+                                        egui::TextureOptions::LINEAR,
+                                    );
+                                    st.icons.insert(a.id.clone(), t.clone());
+                                    Some(t)
+                                }
+                                (None, None) => None,
+                            };
+                            let is_default = current.as_ref().is_some_and(|d| d.app == a.id);
+                            let (rect, resp) = ui.allocate_exact_size(
+                                egui::vec2(ui.available_width(), 40.0),
+                                egui::Sense::click(),
+                            );
+                            if resp.hovered() || is_default {
+                                ui.painter().rect_filled(
+                                    rect,
+                                    6,
+                                    if resp.hovered() {
+                                        pal.hover
+                                    } else {
+                                        pal.selection_inactive
+                                    },
+                                );
                             }
-                            (None, None) => None,
-                        };
-                        let is_default = current.as_ref().is_some_and(|d| d.app == a.id);
-                        let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 40.0), egui::Sense::click());
-                        if resp.hovered() || is_default {
-                            ui.painter().rect_filled(rect, 6, if resp.hovered() { pal.hover } else { pal.selection_inactive });
+                            let ir = egui::Rect::from_min_size(
+                                rect.min + egui::vec2(8.0, 6.0),
+                                egui::Vec2::splat(28.0),
+                            );
+                            match tex {
+                                Some(t) => egui::Image::from_texture(&t).paint_at(ui, ir),
+                                None => super::icons::sym(
+                                    ui.painter(),
+                                    ir,
+                                    super::icons::Sym::Desktop,
+                                    theme::ACCENT,
+                                ),
+                            }
+                            let mut label = a.label.clone();
+                            if is_default {
+                                label.push_str(&format!("  · {}", t("current_default")));
+                            }
+                            ui.painter().text(
+                                egui::pos2(ir.right() + 10.0, rect.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                label,
+                                egui::FontId::proportional(14.0),
+                                ui.visuals().text_color(),
+                            );
+                            if resp.clicked() {
+                                chosen = Some(a.clone());
+                            }
                         }
-                        let ir = egui::Rect::from_min_size(rect.min + egui::vec2(8.0, 6.0), egui::Vec2::splat(28.0));
-                        match tex {
-                            Some(t) => egui::Image::from_texture(&t).paint_at(ui, ir),
-                            None => super::icons::sym(ui.painter(), ir, super::icons::Sym::Desktop, theme::ACCENT),
-                        }
-                        let mut label = a.label.clone();
-                        if is_default {
-                            label.push_str(&format!("  · {}", t("current_default")));
-                        }
-                        ui.painter().text(egui::pos2(ir.right() + 10.0, rect.center().y), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(14.0), ui.visuals().text_color());
-                        if resp.clicked() {
-                            chosen = Some(a.clone());
-                        }
-                    }
-                });
+                    });
             }
         }
         ui.add_space(6.0);
@@ -593,7 +658,11 @@ fn open_with_dialog(app: &mut App, ctx: &egui::Context, st: &mut OpenWith) -> bo
     if let Some(a) = chosen {
         if st.remember || st.file.is_none() {
             app.settings.default_apps.retain(|d| d.ext != st.ext);
-            app.settings.default_apps.push(crate::settings::DefaultApp { ext: st.ext.clone(), app: a.id.clone(), label: a.label.clone() });
+            app.settings.default_apps.push(crate::settings::DefaultApp {
+                ext: st.ext.clone(),
+                app: a.id.clone(),
+                label: a.label.clone(),
+            });
         }
         if let Some(f) = st.file.clone() {
             app.launch(f, Some(a.id), false);
@@ -914,6 +983,14 @@ fn server_dialog(
                 ui.label("");
                 ui.checkbox(&mut server.remember_password, t("remember_password"));
                 ui.end_row();
+                if server.kind == ServerKind::Sftp {
+                    ui.label(t("ssh_key"));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut server.key_path)
+                            .hint_text(t("ssh_key_hint")),
+                    );
+                    ui.end_row();
+                }
                 ui.label(t("start_folder"));
                 ui.add(egui::TextEdit::singleline(&mut server.start_path).hint_text("/"));
                 ui.end_row();
@@ -997,10 +1074,18 @@ fn settings_dialog(app: &mut App, ctx: &egui::Context) -> bool {
                     .changed();
                 ui.checkbox(&mut s.thumbnails, t("show_thumbnails"));
                 ui.checkbox(&mut s.remote_thumbnails, t("remote_thumbnails"));
-                dirty |= ui.checkbox(&mut s.folder_sizes, t("show_folder_sizes")).changed();
+                dirty |= ui
+                    .checkbox(&mut s.folder_sizes, t("show_folder_sizes"))
+                    .changed();
                 ui.horizontal(|ui| {
-                    dirty |= ui.checkbox(&mut s.remember_folder_views, t("remember_views")).changed();
-                    if !s.folder_views.is_empty() && ui.small_button(tf("forget_views", s.folder_views.len())).clicked() {
+                    dirty |= ui
+                        .checkbox(&mut s.remember_folder_views, t("remember_views"))
+                        .changed();
+                    if !s.folder_views.is_empty()
+                        && ui
+                            .small_button(tf("forget_views", s.folder_views.len()))
+                            .clicked()
+                    {
                         s.folder_views.clear();
                         dirty = true;
                     }
@@ -1054,10 +1139,16 @@ fn settings_dialog(app: &mut App, ctx: &egui::Context) -> bool {
                 }
                 ui.separator();
                 ui.label(RichText::new(t("default_apps")).strong());
-                ui.label(RichText::new(t("default_apps_hint")).small().color(theme::palette(app.dark).weak));
+                ui.label(
+                    RichText::new(t("default_apps_hint"))
+                        .small()
+                        .color(theme::palette(app.dark).weak),
+                );
                 let defaults = app.settings.default_apps.clone();
                 if defaults.is_empty() {
-                    ui.label(RichText::new(t("no_default_apps")).color(theme::palette(app.dark).weak));
+                    ui.label(
+                        RichText::new(t("no_default_apps")).color(theme::palette(app.dark).weak),
+                    );
                 }
                 for d in &defaults {
                     ui.horizontal(|ui| {
@@ -1075,9 +1166,16 @@ fn settings_dialog(app: &mut App, ctx: &egui::Context) -> bool {
                     let id = egui::Id::unique("new-default-ext");
                     let mut ext: String = ui.data(|d| d.get_temp(id)).unwrap_or_default();
                     ui.label(t("extension"));
-                    ui.add(egui::TextEdit::singleline(&mut ext).hint_text("pdf").desired_width(70.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut ext)
+                            .hint_text("pdf")
+                            .desired_width(70.0),
+                    );
                     let clean = ext.trim().trim_start_matches('.').to_lowercase();
-                    if ui.add_enabled(!clean.is_empty(), egui::Button::new(t("choose_app"))).clicked() {
+                    if ui
+                        .add_enabled(!clean.is_empty(), egui::Button::new(t("choose_app")))
+                        .clicked()
+                    {
                         next = Some(Dialog::open_with(clean, None));
                         ext.clear();
                     }

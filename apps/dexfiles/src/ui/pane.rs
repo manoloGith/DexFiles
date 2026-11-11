@@ -193,7 +193,16 @@ impl Tab {
                     && (filter.is_empty() || crate::search::name_matches(&e.name, &filter))
             })
             .collect();
-        visible.sort_by(|&a, &b| compare(&source[a], &source[b], sort, descending, folders_first, size_of));
+        visible.sort_by(|&a, &b| {
+            compare(
+                &source[a],
+                &source[b],
+                sort,
+                descending,
+                folders_first,
+                size_of,
+            )
+        });
         self.visible = visible;
         self.dirty = false;
         // Keep only what is still there selected.
@@ -267,7 +276,6 @@ impl Tab {
         let all: Vec<Location> = self.items().map(|e| e.location.clone()).collect();
         self.selected = all.into_iter().collect();
     }
-
 }
 
 pub fn location_title(l: &Location) -> String {
