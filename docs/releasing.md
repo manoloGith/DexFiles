@@ -35,7 +35,10 @@ keytool -genkeypair -keystore dexfiles-release.jks -alias dexfiles -keyalg RSA -
 ```
 
 **La misma clave que DexPdfCraft:** se pueden copiar sus secretos con estos nombres. Las apps
-quedan firmadas por el mismo autor.
+quedan firmadas por el mismo autor. DexFiles se firma así desde la 0.2.0. Huella SHA-256 del
+certificado: `F6:32:86:6C:2B:DA:04:84:32:79:B0:FE:6C:66:B2:8A:02:6E:BC:89:F3:ED:F8:68:49:D3:B2:FF:BB:12:3E:4F`.
+La 0.1.0 se publicó firmada con una clave de depuración (pre-release): quien la tenga debe
+desinstalarla antes de instalar la 0.2.0.
 
 **Sin los secretos**, el workflow firma con una clave de depuración y publica una *pre-release*.
 Una pre-release instalada no se puede actualizar con versiones firmadas con la clave real: hay que
