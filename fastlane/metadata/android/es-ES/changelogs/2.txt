@@ -1,0 +1,1 @@
+Ajustes nuevos con menú lateral, etiquetas propias (nombre y color) y preferencias que se guardan en cuanto cambian.

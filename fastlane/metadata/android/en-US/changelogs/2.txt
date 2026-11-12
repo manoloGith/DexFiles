@@ -1,0 +1,1 @@
+New settings with a side menu, your own tags (name and colour), and settings saved as soon as they change.
