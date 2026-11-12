@@ -52,6 +52,17 @@ CurrentVersion: 0.1.0
 CurrentVersionCode: 1
 ```
 
+**Comprobado:** con esas opciones (`-Pdexfiles.abis=arm64-v8a -Pdexfiles.unsigned=true`, sin
+`dexfiles.features`) Gradle produce `app-release-unsigned.apk` y la biblioteca no contiene UnRAR.
+
+**Para enviarlo** hace falta una cuenta de GitLab:
+1. Haz un *fork* de [fdroiddata](https://gitlab.com/fdroid/fdroiddata).
+2. Añade `metadata/io.github.dexfiles.yml` con el borrador de arriba.
+3. Abre la *merge request*. La plantilla de F-Droid pide confirmar la licencia y que no hay
+   dependencias no libres.
+
+Conviene enviarlo con la versión firmada con la clave definitiva ya publicada en GitHub.
+
 Puntos que la revisión de F-Droid mirará:
 
 - **Sin RAR.** La compilación de F-Droid no pasa `dexfiles.features=rar`, así que no lleva UnRAR,
