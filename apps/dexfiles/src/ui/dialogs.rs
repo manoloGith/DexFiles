@@ -12,7 +12,7 @@ use crate::archive::ArchiveFormat;
 use crate::fileinfo;
 use crate::i18n::{t, tf};
 use crate::ops::{Answer, Conflict};
-use crate::settings::{Language, StartMode, ThemeChoice, ViewMode};
+
 use crate::trash::TrashInfo;
 use crate::vfs::{self, Entry, Location, Server, ServerId, ServerKind};
 
@@ -359,7 +359,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             });
             keep && !close
         }
-        Dialog::Settings => settings_dialog(app, ctx),
+        Dialog::Settings => super::settings_view::show(app, ctx),
         Dialog::Properties(entry) => {
             let mut keep = true;
             let mut size_of: Option<Entry> = None;
@@ -1031,207 +1031,6 @@ fn server_dialog(
             keep = false;
         }
     });
-    keep && !close
-}
-
-fn settings_dialog(app: &mut App, ctx: &egui::Context) -> bool {
-    let mut keep = true;
-    let mut next: Option<Dialog> = None;
-    let here = app.tab(app.active_pane).location().clone();
-    let close = modal(ctx, "settings", 540.0, |ui| {
-        ui.heading(t("settings"));
-        egui::ScrollArea::vertical()
-            .max_height(ctx.content_rect().height() * 0.7)
-            .show(ui, |ui| {
-                let s = &mut app.settings;
-                ui.add_space(4.0);
-                ui.label(RichText::new(t("on_start")).strong());
-                ui.radio_value(&mut s.start, StartMode::Home, t("start_home"));
-                ui.radio_value(&mut s.start, StartMode::Downloads, t("start_downloads"));
-                ui.radio_value(&mut s.start, StartMode::LastSession, t("start_last"));
-                ui.horizontal(|ui| {
-                    ui.radio_value(&mut s.start, StartMode::Folder, t("start_folder_opt"));
-                    ui.add_enabled(
-                        s.start == StartMode::Folder,
-                        egui::TextEdit::singleline(&mut s.start_folder).desired_width(220.0),
-                    );
-                    if let Location::Local(p) = &here
-                        && ui.small_button(t("use_current")).clicked()
-                    {
-                        s.start = StartMode::Folder;
-                        s.start_folder = p.display().to_string();
-                    }
-                });
-                ui.separator();
-                ui.label(RichText::new(t("view")).strong());
-                ui.horizontal(|ui| {
-                    ui.label(t("default_view"));
-                    egui::ComboBox::from_id_salt("default-view")
-                        .selected_text(t(s.view.key()))
-                        .show_ui(ui, |ui| {
-                            for v in ViewMode::ALL {
-                                ui.selectable_value(&mut s.view, v, t(v.key()));
-                            }
-                        });
-                });
-                let mut dirty = false;
-                dirty |= ui.checkbox(&mut s.show_hidden, t("show_hidden")).changed();
-                dirty |= ui
-                    .checkbox(&mut s.show_extensions, t("show_extensions"))
-                    .changed();
-                dirty |= ui
-                    .checkbox(&mut s.folders_first, t("folders_first"))
-                    .changed();
-                ui.checkbox(&mut s.thumbnails, t("show_thumbnails"));
-                ui.checkbox(&mut s.remote_thumbnails, t("remote_thumbnails"));
-                dirty |= ui
-                    .checkbox(&mut s.folder_sizes, t("show_folder_sizes"))
-                    .changed();
-                ui.horizontal(|ui| {
-                    dirty |= ui
-                        .checkbox(&mut s.remember_folder_views, t("remember_views"))
-                        .changed();
-                    if !s.folder_views.is_empty()
-                        && ui
-                            .small_button(tf("forget_views", s.folder_views.len()))
-                            .clicked()
-                    {
-                        s.folder_views.clear();
-                        dirty = true;
-                    }
-                });
-                ui.checkbox(&mut s.search_subfolders, t("search_while_typing"));
-                ui.separator();
-                ui.label(RichText::new(t("appearance")).strong());
-                ui.horizontal(|ui| {
-                    ui.label(t("theme"));
-                    ui.radio_value(&mut s.theme, ThemeChoice::System, t("theme_system"));
-                    ui.radio_value(&mut s.theme, ThemeChoice::Light, t("theme_light"));
-                    ui.radio_value(&mut s.theme, ThemeChoice::Dark, t("theme_dark"));
-                });
-                ui.horizontal(|ui| {
-                    ui.label(t("language"));
-                    let before = s.language;
-                    ui.radio_value(&mut s.language, Language::Auto, t("lang_auto"));
-                    ui.radio_value(&mut s.language, Language::Spanish, "Español");
-                    ui.radio_value(&mut s.language, Language::English, "English");
-                    if before != s.language {
-                        crate::i18n::set_language(s.language);
-                    }
-                });
-                ui.horizontal(|ui| {
-                    ui.label(t("zoom"));
-                    // Steps of 20 %. The value is applied when the slider is let go: applying
-                    // it while dragging moves the slider under the pointer, and it runs away.
-                    let id = egui::Id::unique("zoom-edit");
-                    let mut v: f32 = ui.data(|d| d.get_temp(id)).unwrap_or(s.zoom);
-                    let r = ui.add(
-                        egui::Slider::new(&mut v, 0.6..=2.4)
-                            .step_by(0.2)
-                            .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
-                    );
-                    if r.dragged() {
-                        ui.data_mut(|d| d.insert_temp(id, v));
-                    } else {
-                        if (v - s.zoom).abs() > 0.001 {
-                            s.zoom = (v * 5.0).round() / 5.0;
-                        }
-                        ui.data_mut(|d| d.remove::<f32>(id));
-                    }
-                    for (label, delta) in [("−", -0.2f32), ("+", 0.2)] {
-                        if ui.small_button(label).clicked() {
-                            s.zoom = ((s.zoom + delta) * 5.0).round().clamp(3.0, 12.0) / 5.0;
-                        }
-                    }
-                });
-                ui.separator();
-                ui.label(RichText::new(t("network")).strong());
-                let servers = s.servers.clone();
-                if servers.is_empty() {
-                    ui.label(RichText::new(t("no_servers")).color(theme::palette(app.dark).weak));
-                }
-                for srv in &servers {
-                    ui.horizontal(|ui| {
-                        ui.label(format!("{} — {}", srv.display_name(), srv.url_base()));
-                        if ui.small_button(t("edit")).clicked() {
-                            app.actions.push(Action::EditServer(Some(srv.id)));
-                        }
-                        if ui.small_button(t("remove_server")).clicked() {
-                            app.actions.push(Action::RemoveServer(srv.id));
-                        }
-                    });
-                }
-                if ui.button(t("connect_server")).clicked() {
-                    app.actions.push(Action::EditServer(None));
-                }
-                ui.separator();
-                ui.label(RichText::new(t("default_apps")).strong());
-                ui.label(
-                    RichText::new(t("default_apps_hint"))
-                        .small()
-                        .color(theme::palette(app.dark).weak),
-                );
-                let defaults = app.settings.default_apps.clone();
-                if defaults.is_empty() {
-                    ui.label(
-                        RichText::new(t("no_default_apps")).color(theme::palette(app.dark).weak),
-                    );
-                }
-                for d in &defaults {
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(format!(".{}", d.ext)).strong());
-                        ui.label(format!("· {}", d.label));
-                        if ui.small_button(t("change")).clicked() {
-                            next = Some(Dialog::open_with(d.ext.clone(), None));
-                        }
-                        if ui.small_button(t("remove_default")).clicked() {
-                            app.settings.default_apps.retain(|x| x.ext != d.ext);
-                        }
-                    });
-                }
-                // Dex apps: set again what was removed (without replacing other choices).
-                if ui
-                    .small_button(t("dex_apps_again"))
-                    .on_hover_text(t("dex_apps_again_hint"))
-                    .clicked()
-                {
-                    app.settings.dex_offered.clear();
-                    app.rescan_dex_apps();
-                }
-                ui.horizontal(|ui| {
-                    let id = egui::Id::unique("new-default-ext");
-                    let mut ext: String = ui.data(|d| d.get_temp(id)).unwrap_or_default();
-                    ui.label(t("extension"));
-                    ui.add(
-                        egui::TextEdit::singleline(&mut ext)
-                            .hint_text("pdf")
-                            .desired_width(70.0),
-                    );
-                    let clean = ext.trim().trim_start_matches('.').to_lowercase();
-                    if ui
-                        .add_enabled(!clean.is_empty(), egui::Button::new(t("choose_app")))
-                        .clicked()
-                    {
-                        next = Some(Dialog::open_with(clean, None));
-                        ext.clear();
-                    }
-                    ui.data_mut(|d| d.insert_temp(id, ext));
-                });
-                if dirty {
-                    app.mark_dirty();
-                }
-            });
-        ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button(t("close")).clicked() {
-                keep = false;
-            }
-        });
-    });
-    if let Some(d) = next {
-        app.dialog = Some(d);
-        return false;
-    }
     keep && !close
 }
 

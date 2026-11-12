@@ -230,7 +230,7 @@ impl Location {
             },
             Location::Trash => "trash:///".to_owned(),
             Location::Tag(c) => {
-                format!("tag:///{}", crate::tags::key(*c).trim_start_matches("tag_"))
+                format!("tag:///{c}")
             }
             Location::Archive { archive, inner } => format!(
                 "{}{}",

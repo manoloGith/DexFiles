@@ -80,7 +80,11 @@ fn create(cc: &eframe::CreationContext<'_>, launch: Launch) -> Box<dyn eframe::A
     let app = ui::App::new(cc, launch.open);
     // craft-android's shell: the activity's mouse, keyboard and insets, Back as the close button,
     // the window title for DeX's taskbar. Nothing to autosave: every operation is already on disk.
-    Box::new(craft_android::Shell::new(app).title(ui::App::title))
+    Box::new(
+        craft_android::Shell::new(app)
+            .title(ui::App::title)
+            .on_focus_lost(ui::App::persist),
+    )
 }
 
 #[cfg(target_os = "android")]

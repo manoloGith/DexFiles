@@ -48,7 +48,10 @@ informe.
 22. Apps Dex: con DexPdfCraft instalado (versión que declara `.pdf`), abrir DexFiles: aviso
     «Apps predeterminadas a partir de ahora: DexPdfCraft (.pdf)»; doble clic en un PDF lo abre
     en DexPdfCraft. Quitarla en Ajustes y volver a la ventana: no vuelve.
-23. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
+23. Ajustes: las seis pestañas; Aplicaciones «Por aplicación»; Etiquetas: crear una, cambiarle
+    nombre y color, ordenarla, ponerla a un archivo, eliminarla. Actualizar el APK (o forzar el
+    cierre) y comprobar que todo sigue igual.
+24. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
 
 ## Tests automáticos
 

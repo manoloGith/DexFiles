@@ -323,3 +323,32 @@ rename_changes	{} names change	Cambian {} nombres
 dex_apps_added	Default apps from now on: {}	Apps predeterminadas a partir de ahora: {}
 dex_apps_again	Use the Dex apps again	Volver a usar las apps Dex
 dex_apps_again_hint	Sets each Dex app again for the extensions it opens, where no other app is chosen	Vuelve a asignar cada app Dex a las extensiones que abre, donde no haya otra elegida
+no_tags	No tags (Settings ▸ Tags)	Sin etiquetas (Ajustes ▸ Etiquetas)
+settings_general	General	General
+settings_general_hint	What DexFiles shows when it opens, and how it searches	Qué muestra DexFiles al abrirse y cómo busca
+settings_view_hint	How folders and files are listed	Cómo se listan las carpetas y los archivos
+settings_appearance_hint	Theme, language and size of the interface	Tema, idioma y tamaño de la interfaz
+settings_network_hint	Servers saved to browse: FTP, SFTP, SMB and WebDAV	Servidores guardados para navegar: FTP, SFTP, SMB y WebDAV
+settings_tags_hint	Your tags: their names, colours and order	Tus etiquetas: nombres, colores y orden
+settings_files	Files	Archivos
+settings_folders	Folders	Carpetas
+settings_thumbnails	Thumbnails	Miniaturas
+settings_servers	Servers	Servidores
+settings_your_tags	Your tags	Tus etiquetas
+zoom_hint	For big monitors (Ctrl+= and Ctrl+− too)	Para monitores grandes (también Ctrl+= y Ctrl+−)
+apps_show	Show	Ver
+apps_by_ext	By extension	Por extensión
+apps_by_app	By app	Por aplicación
+apps_add	Add	Añadir
+apps_add_hint	Choose which app opens a kind of file	Elige qué app abre un tipo de archivo
+n_extensions	{} extensions	{} extensiones
+remove_all	Remove all	Quitar todas
+apply	Apply	Aplicar
+no_tags_yet	No tags yet: create one below.	Todavía no hay etiquetas: crea una abajo.
+delete_tag_q	Remove it from every item?	¿Quitarla de todos los elementos?
+new_tag	New tag	Nueva etiqueta
+new_tag_name	Tag {}	Etiqueta {}
+tags_hint	Tags are put on from a file's context menu, or by dropping files on a tag in the sidebar.	Las etiquetas se ponen desde el menú contextual de un archivo o soltando archivos sobre una etiqueta de la barra lateral.
+settings_apps	Apps	Aplicaciones
+settings_interface	Interface	Interfaz
+one_extension	1 extension	1 extensión

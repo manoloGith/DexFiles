@@ -1,4 +1,7 @@
-//! Settings, kept by eframe's storage (`app.ron`).
+//! Settings. They are written to a file of their own (`settings.ron` in the app's data folder)
+//! as soon as they change, replacing it atomically, so an update that stops the app loses none;
+//! eframe's storage (`app.ron`) keeps a second copy, and is where older versions kept them.
+//! A file that can't be read is set aside (`settings.ron.bad-…`), never overwritten in silence.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -6,6 +9,27 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::vfs::{Location, Server, ServerId};
+
+/// A tag of the user's: a name and a colour (see [`crate::tags`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TagDef {
+    /// What items carry (kept when the tag is renamed or recoloured).
+    pub id: u8,
+    /// Empty: the starting tags are named after their colour, in the interface's language.
+    pub name: String,
+    pub color: [u8; 3],
+}
+
+impl Default for TagDef {
+    fn default() -> Self {
+        TagDef {
+            id: 0,
+            name: String::new(),
+            color: [0x8e, 0x8e, 0x93],
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ViewMode {
@@ -208,7 +232,10 @@ pub struct Settings {
     /// Extensions Dex apps declared, already offered as default apps (`ext|app`): one the user
     /// removed or changed is not set again.
     pub dex_offered: Vec<String>,
-    /// Colour tags (see [`crate::tags`]).
+    /// The user's tags, in their order (seven colours the first time).
+    pub tag_defs: Vec<TagDef>,
+    pub tag_defs_initialized: bool,
+    /// Which tags each item carries (see [`crate::tags`]).
     pub tags: HashMap<Location, Vec<u8>>,
 }
 
@@ -257,12 +284,75 @@ impl Default for Settings {
             default_apps: Vec::new(),
             tags: HashMap::new(),
             dex_offered: Vec::new(),
+            tag_defs: Vec::new(),
+            tag_defs_initialized: false,
         }
     }
 }
 
 impl Settings {
     pub const KEY: &'static str = "dexfiles-settings";
+
+    /// The settings file.
+    pub fn file() -> PathBuf {
+        crate::platform::data_dir().join("settings.ron")
+    }
+
+    /// The settings: from their file; else eframe's copy (`stored`: what older versions kept);
+    /// else the defaults.
+    pub fn load(stored: Option<String>) -> Settings {
+        let path = Self::file();
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            match Self::from_text(&text) {
+                Ok(s) => return s,
+                Err(e) => {
+                    log::warn!("dexfiles: settings unreadable ({e}); kept aside");
+                    let stamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    let _ = std::fs::rename(&path, path.with_extension(format!("ron.bad-{stamp}")));
+                }
+            }
+        }
+        stored
+            .and_then(|text| Self::from_text(&text).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn from_text(text: &str) -> Result<Settings, String> {
+        ron::from_str(text).map_err(|e| e.to_string())
+    }
+
+    /// What is written (see [`Settings::for_storage`]).
+    pub fn to_text(&self) -> Option<String> {
+        ron::ser::to_string_pretty(&self.for_storage(), ron::ser::PrettyConfig::default()).ok()
+    }
+
+    /// Write `text` as the settings file: to a temporary file first, then renamed over it.
+    pub fn write_text(text: &str) -> std::io::Result<()> {
+        let path = Self::file();
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let tmp = path.with_extension("ron.tmp");
+        {
+            use std::io::Write as _;
+            let mut f = std::fs::File::create(&tmp)?;
+            f.write_all(text.as_bytes())?;
+            f.sync_all()?;
+        }
+        std::fs::rename(&tmp, &path)
+    }
+
+    /// First start (or the first with tags of one's own): the seven colours.
+    pub fn init_tags(&mut self) {
+        if self.tag_defs_initialized {
+            return;
+        }
+        self.tag_defs_initialized = true;
+        self.tag_defs = crate::tags::builtin();
+    }
 
     /// First start: the standard folders as favourites.
     pub fn init_favorites(&mut self) {
@@ -351,5 +441,70 @@ impl Settings {
             }
         }
         s
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Settings written by an older version (fields missing, one no longer known) load with
+    /// everything they had.
+    #[test]
+    fn older_settings_load() {
+        let old = r#"(
+            show_hidden: true,
+            zoom: 1.4,
+            view: LargeIcons,
+            favorites: [(name: "Fotos", location: Local("/sdcard/DCIM"))],
+            default_apps: [(ext: "pdf", app: "io.github.dexpdfcraft/.MainActivity", label: "DexPdfCraft")],
+            tags: {Local("/sdcard/a.txt"): [4]},
+            something_removed_since: 3,
+        )"#;
+        let s = Settings::from_text(old).unwrap_or_else(|e| unreachable!("{e}"));
+        assert!(s.show_hidden);
+        assert!((s.zoom - 1.4).abs() < 1e-6);
+        assert_eq!(s.favorites.len(), 1);
+        assert_eq!(
+            s.default_app("pdf").map(|d| d.label.as_str()),
+            Some("DexPdfCraft")
+        );
+        assert_eq!(
+            s.tags.get(&Location::local("/sdcard/a.txt")),
+            Some(&vec![4])
+        );
+        // New fields take their defaults; the tags are set up on start.
+        let mut s = s;
+        assert!(s.tag_defs.is_empty());
+        s.init_tags();
+        assert_eq!(s.tag_defs.len(), 7);
+    }
+
+    #[test]
+    fn settings_round_trip() {
+        let mut s = Settings::default();
+        s.init_tags();
+        s.tag_defs.push(TagDef {
+            id: 9,
+            name: "Facturas".into(),
+            color: [1, 2, 3],
+        });
+        s.tags.insert(Location::local("/x/y.pdf"), vec![9, 2]);
+        s.folder_views.insert(
+            "/x".into(),
+            FolderView {
+                view: ViewMode::Content,
+                sort: SortKey::Name,
+                descending: false,
+            },
+        );
+        let text = s.to_text().unwrap_or_default();
+        let back = Settings::from_text(&text).unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(back.tag_defs, s.tag_defs);
+        assert_eq!(back.tags, s.tags);
+        assert_eq!(
+            back.folder_views.get("/x").map(|f| f.view),
+            Some(ViewMode::Content)
+        );
     }
 }

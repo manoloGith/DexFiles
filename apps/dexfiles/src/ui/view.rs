@@ -602,9 +602,14 @@ pub fn entry_icon(app: &mut App, ui: &Ui, rect: Rect, e: &Entry, allow_thumb: bo
 
 /// A row of the colour tags, to put on or take off the selection.
 pub fn tag_row(app: &mut App, ui: &mut Ui, sel: &[Location]) {
-    ui.horizontal(|ui| {
+    ui.set_max_width(240.0);
+    ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
-        for c in 0..crate::tags::COUNT {
+        let defs = app.settings.tag_defs.clone();
+        if defs.is_empty() {
+            ui.label(egui::RichText::new(t("no_tags")).small());
+        }
+        for c in defs.iter().map(|d| d.id) {
             let on = !sel.is_empty()
                 && sel
                     .iter()

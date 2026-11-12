@@ -322,6 +322,13 @@ pub enum Sym {
     Playlist,
     Fullscreen,
     ExitFullscreen,
+    Down,
+    /// A label with a hole (tags).
+    Tag,
+    /// A window with a corner app grid (apps).
+    Apps,
+    /// A half-filled circle (appearance).
+    Contrast,
 }
 
 pub fn sym(painter: &Painter, rect: Rect, s: Sym, color: Color32) {
@@ -339,6 +346,42 @@ pub fn sym(painter: &Painter, rect: Rect, s: Sym, color: Color32) {
         Sym::Back => line(&[p(0.3, -0.7), p(-0.4, 0.0), p(0.3, 0.7)]),
         Sym::Forward => line(&[p(-0.3, -0.7), p(0.4, 0.0), p(-0.3, 0.7)]),
         Sym::Up => line(&[p(-0.7, 0.3), p(0.0, -0.4), p(0.7, 0.3)]),
+        Sym::Down => line(&[p(-0.7, -0.3), p(0.0, 0.4), p(0.7, -0.3)]),
+        Sym::Tag => {
+            line(&[
+                p(-0.85, -0.25),
+                p(-0.85, -0.85),
+                p(-0.25, -0.85),
+                p(0.85, 0.25),
+                p(0.25, 0.85),
+                p(-0.85, -0.25),
+            ]);
+            painter.circle_stroke(p(-0.45, -0.45), h * 0.14, st);
+        }
+        Sym::Apps => {
+            let s2 = h * 0.36;
+            for (x, y) in [(-0.45, -0.45), (0.45, -0.45), (-0.45, 0.45), (0.45, 0.45)] {
+                painter.rect_stroke(
+                    egui::Rect::from_center_size(p(x, y), vec2(s2 * 2.0, s2 * 2.0)),
+                    CornerRadius::same(2),
+                    st,
+                    egui::StrokeKind::Middle,
+                );
+            }
+        }
+        Sym::Contrast => {
+            painter.circle_stroke(c, h * 0.85, st);
+            let n = 16;
+            let mut pts: Vec<Pos2> = (0..=n)
+                .map(|i| {
+                    let a =
+                        -std::f32::consts::FRAC_PI_2 + std::f32::consts::PI * i as f32 / n as f32;
+                    pos2(c.x + a.cos() * h * 0.85, c.y + a.sin() * h * 0.85)
+                })
+                .collect();
+            pts.push(c);
+            painter.add(Shape::convex_polygon(pts, color, Stroke::NONE));
+        }
         Sym::Refresh => {
             let n = 20;
             let pts: Vec<Pos2> = (0..=n)

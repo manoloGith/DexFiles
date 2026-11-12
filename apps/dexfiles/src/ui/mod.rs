@@ -9,6 +9,7 @@ pub mod pane;
 pub mod player;
 pub mod preview_panel;
 pub mod quicklook;
+pub mod settings_view;
 pub mod sidebar;
 pub mod theme;
 pub mod thumbs;

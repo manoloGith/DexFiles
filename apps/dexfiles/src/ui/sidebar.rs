@@ -450,15 +450,14 @@ fn tags(app: &mut App, ui: &mut Ui) {
     let pal = theme::palette(app.dark);
     let here = app.tab(app.active_pane).location().clone();
     let dragging = egui::DragAndDrop::has_payload_of_type::<DragPayload>(ui.ctx());
-    let mut counts = [0usize; crate::tags::COUNT as usize];
+    let mut counts = [0usize; 256];
     for v in app.settings.tags.values() {
         for &c in v {
-            if let Some(n) = counts.get_mut(c as usize) {
-                *n += 1;
-            }
+            counts[c as usize] += 1;
         }
     }
-    for c in 0..crate::tags::COUNT {
+    let defs = app.settings.tag_defs.clone();
+    for c in defs.iter().map(|d| d.id) {
         let loc = Location::Tag(c);
         let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
         if here == loc {

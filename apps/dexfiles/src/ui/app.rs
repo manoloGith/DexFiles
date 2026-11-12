@@ -187,6 +187,11 @@ pub struct App {
     /// Look for Dex apps (at start, and when the window comes back: one may have been installed).
     dex_scan_due: bool,
     was_focused: bool,
+    /// The settings window's section and choices.
+    pub settings_ui: super::settings_view::State,
+    /// The settings as last written to their file, and when they were last compared.
+    saved_settings: String,
+    persisted_at: Instant,
     pub dialog: Option<Dialog>,
     pub tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -231,14 +236,13 @@ pub struct App {
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, open: Vec<PathBuf>) -> Self {
         let ctx = cc.egui_ctx.clone();
-        let mut settings: Settings = cc
-            .storage
-            .and_then(|s| eframe::get_value(s, Settings::KEY))
-            .unwrap_or_default();
+        let mut settings = Settings::load(cc.storage.and_then(|s| s.get_string(Settings::KEY)));
         crate::i18n::set_language(settings.language);
         settings.init_favorites();
         vfs::servers::set_servers(&settings.servers);
+        settings.init_tags();
         crate::tags::publish(&settings.tags);
+        crate::tags::publish_defs(&settings.tag_defs);
         super::theme::install_fonts(&ctx);
         egui_extras_free_image_loaders(&ctx);
         let (tx, rx) = channel();
@@ -287,6 +291,9 @@ impl App {
             drag_out: None,
             dex_scan_due: true,
             was_focused: true,
+            settings_ui: Default::default(),
+            saved_settings: String::new(),
+            persisted_at: Instant::now(),
             dialog: None,
             tx,
             rx,
@@ -1273,6 +1280,23 @@ impl App {
             });
     }
 
+    /// Write the settings to their file if they changed (checked every second, when the window
+    /// loses focus and on exit: an update or Android closing the app loses nothing).
+    pub fn persist(&mut self) {
+        self.persisted_at = Instant::now();
+        self.save_session();
+        let Some(text) = self.settings.to_text() else {
+            return;
+        };
+        if text == self.saved_settings {
+            return;
+        }
+        match Settings::write_text(&text) {
+            Ok(()) => self.saved_settings = text,
+            Err(e) => log::warn!("dexfiles: settings not written: {e}"),
+        }
+    }
+
     pub fn rescan_dex_apps(&mut self) {
         self.dex_scan_due = true;
     }
@@ -1329,6 +1353,7 @@ impl App {
     /// The tags changed: listings of a colour are read again.
     pub fn tags_changed(&mut self) {
         crate::tags::publish(&self.settings.tags);
+        crate::tags::publish_defs(&self.settings.tag_defs);
         for p in 0..2 {
             for i in 0..self.panes[p].tabs.len() {
                 if matches!(self.panes[p].tabs[i].location(), Location::Tag(_)) {
@@ -2124,6 +2149,9 @@ impl eframe::App for App {
         self.watch_folders();
         self.thumbs.update(ctx);
         self.scan_dex_apps(ctx);
+        if self.persisted_at.elapsed() >= Duration::from_secs(1) {
+            self.persist();
+        }
         self.closing(ctx);
         self.keyboard(ctx);
         self.refresh_visible_all();
@@ -2150,7 +2178,7 @@ impl eframe::App for App {
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        self.save_session();
+        self.persist();
         eframe::set_value(storage, Settings::KEY, &self.settings.for_storage());
     }
 
