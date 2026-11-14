@@ -1,0 +1,1 @@
+Default apps with on/off switches (one app on per extension); double click opens the file in its default app, Space keeps DexFiles' viewers.

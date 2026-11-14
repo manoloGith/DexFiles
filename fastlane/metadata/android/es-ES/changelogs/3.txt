@@ -1,0 +1,1 @@
+Aplicaciones predeterminadas con interruptores (una activada por extensión); el doble clic abre el archivo en su app predeterminada y la barra espaciadora mantiene los visores.

@@ -64,10 +64,28 @@ Builds:
       - dexfiles.unsigned=true
     ndk: 29.0.14206865
 
+  - versionName: 0.2.1
+    versionCode: 3
+    commit: v0.2.1
+    subdir: apps/dexfiles/android/app
+    submodules: true
+    gradle:
+      - yes
+    output: build/outputs/apk/release/app-release-unsigned.apk
+    prebuild:
+      - curl -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
+      - source $HOME/.cargo/env
+      - rustup toolchain install $(sed -n 's/^channel = "\(.*\)"/\1/p' ../../../../rust-toolchain.toml)
+      - cargo install cargo-ndk --version 4.1.2 --locked
+    gradleprops:
+      - dexfiles.abis=arm64-v8a
+      - dexfiles.unsigned=true
+    ndk: 29.0.14206865
+
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9.]+$
-CurrentVersion: 0.2.0
-CurrentVersionCode: 2
+CurrentVersion: 0.2.1
+CurrentVersionCode: 3
 ```
 
 **Comprobado:** con esas opciones (`-Pdexfiles.abis=arm64-v8a -Pdexfiles.unsigned=true`, sin
