@@ -1,0 +1,1 @@
+Settings ▸ Apps only lists installed apps: uninstalled ones (old or test builds of Dex apps) are removed.

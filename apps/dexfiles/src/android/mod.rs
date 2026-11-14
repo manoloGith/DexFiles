@@ -183,10 +183,11 @@ pub fn apps_for(ext: &str, mime: &str) -> Vec<crate::apps::AppInfo> {
 }
 
 /// The installed apps that declare the extensions they open (Dex apps).
-pub fn dex_apps() -> Vec<crate::apps::DexApp> {
+pub fn dex_apps() -> Option<Vec<crate::apps::DexApp>> {
     let answer = call("dex_apps", json!({ "key": crate::apps::EXTENSIONS_KEY }));
+    let list = answer["apps"].as_array()?;
     let mut out = Vec::new();
-    for a in answer["apps"].as_array().into_iter().flatten() {
+    for a in list {
         let Some(id) = a["id"].as_str() else { continue };
         let exts = crate::apps::parse_extensions(a["extensions"].as_str().unwrap_or_default());
         if exts.is_empty() {
@@ -198,7 +199,19 @@ pub fn dex_apps() -> Vec<crate::apps::DexApp> {
             exts,
         });
     }
-    out
+    Some(out)
+}
+
+/// Which of these apps (`package/activity`) are installed (`None`: the activity didn't answer).
+pub fn installed(ids: &[String]) -> Option<Vec<String>> {
+    let answer = call("installed", json!({ "ids": ids }));
+    Some(
+        answer["installed"]
+            .as_array()?
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect(),
+    )
 }
 
 /// Open a file with one app (`package/activity`).

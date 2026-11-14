@@ -56,7 +56,10 @@ pub enum Msg {
     },
     Status(String),
     /// The installed Dex apps and their extensions.
-    DexApps(Vec<crate::apps::DexApp>),
+    DexApps {
+        apps: Option<Vec<crate::apps::DexApp>>,
+        installed: Option<Vec<String>>,
+    },
     /// What a paste found on the system clipboard (`None`: DexFiles' own copy, or no files).
     ClipboardFiles {
         dest: Location,
@@ -574,7 +577,12 @@ impl App {
                     }
                 }
                 Msg::Status(text) => self.say(text),
-                Msg::DexApps(apps) => self.adopt_dex_apps(apps),
+                Msg::DexApps { apps, installed } => {
+                    self.forget_missing_apps(apps.as_deref(), installed.as_deref());
+                    if let Some(apps) = apps {
+                        self.adopt_dex_apps(apps);
+                    }
+                }
                 Msg::ClipboardFiles { dest, paths } => match paths {
                     Some(paths) => self.start_job(JobKind::Transfer {
                         sources: paths.into_iter().map(Location::Local).collect(),
@@ -1269,15 +1277,47 @@ impl App {
             return;
         }
         let (tx, ctx) = (self.tx.clone(), ctx.clone());
+        let mut ids: Vec<String> = self
+            .settings
+            .default_apps
+            .iter()
+            .map(|d| d.app.clone())
+            .collect();
+        ids.sort();
+        ids.dedup();
         let _ = std::thread::Builder::new()
             .name("dexfiles-dex-apps".into())
             .spawn(move || {
                 let apps = crate::apps::dex_apps();
-                if !apps.is_empty() {
-                    let _ = tx.send(Msg::DexApps(apps));
-                    ctx.request_repaint();
-                }
+                let installed = if ids.is_empty() {
+                    None
+                } else {
+                    crate::apps::installed(&ids)
+                };
+                let _ = tx.send(Msg::DexApps { apps, installed });
+                ctx.request_repaint();
             });
+    }
+
+    /// Default apps that are no longer installed go from the list (Settings ▸ Apps): Dex apps
+    /// not found any more (an old version, a debug build since removed), and any app the
+    /// system says is not installed. Nothing goes when the system couldn't be asked.
+    pub fn forget_missing_apps(
+        &mut self,
+        dex: Option<&[crate::apps::DexApp]>,
+        installed: Option<&[String]>,
+    ) {
+        let dex_ids: Option<Vec<String>> = dex.map(|d| d.iter().map(|a| a.id.clone()).collect());
+        let removed = self
+            .settings
+            .forget_missing_apps(dex_ids.as_deref(), installed);
+        if removed.is_empty() {
+            return;
+        }
+        let mut names: Vec<String> = removed.iter().map(|d| d.label.clone()).collect();
+        names.sort();
+        names.dedup();
+        self.say(tf("apps_gone", names.join(", ")));
     }
 
     /// Write the settings to their file if they changed (checked every second, when the window

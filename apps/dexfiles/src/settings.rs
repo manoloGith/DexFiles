@@ -452,6 +452,45 @@ impl Settings {
         }
     }
 
+    /// Forget default apps that are gone: Dex apps (offered by DexFiles) no longer among
+    /// `dex_ids`, and apps not among `installed`. `None` means "couldn't be asked": nothing is
+    /// concluded from it. An extension that loses its app switched on gets another of its apps.
+    /// What was forgotten.
+    pub fn forget_missing_apps(
+        &mut self,
+        dex_ids: Option<&[String]>,
+        installed: Option<&[String]>,
+    ) -> Vec<DefaultApp> {
+        let offered = &self.dex_offered;
+        let removed: Vec<DefaultApp> = self
+            .default_apps
+            .iter()
+            .filter(|d| {
+                let not_installed = installed.is_some_and(|ins| !ins.contains(&d.app));
+                let dex_gone = dex_ids.is_some_and(|ids| {
+                    offered.contains(&format!("{}|{}", d.ext, d.app)) && !ids.contains(&d.app)
+                });
+                not_installed || dex_gone
+            })
+            .cloned()
+            .collect();
+        if removed.is_empty() {
+            return removed;
+        }
+        self.default_apps.retain(|d| !removed.contains(d));
+        // Offered again if it comes back.
+        self.dex_offered
+            .retain(|k| !removed.iter().any(|d| *k == format!("{}|{}", d.ext, d.app)));
+        for d in removed.iter().filter(|d| d.enabled) {
+            if self.default_app(&d.ext).is_none()
+                && let Some(other) = self.default_apps.iter_mut().find(|o| o.ext == d.ext)
+            {
+                other.enabled = true;
+            }
+        }
+        removed
+    }
+
     /// Make `app` the extension's default (the others it had stay, switched off).
     pub fn set_default(&mut self, ext: &str, app: &str, label: &str) {
         match self
@@ -546,6 +585,37 @@ mod tests {
         assert!(s.default_app("png").is_none());
         assert_eq!(s.chosen_app("png").map(|d| d.app.as_str()), Some("a"));
         assert_eq!(s.default_app("jpg").map(|d| d.app.as_str()), Some("a"));
+    }
+
+    #[test]
+    fn uninstalled_apps_are_forgotten() {
+        let mut s = Settings::default();
+        // Two DexNotas found over time (an old build and the one installed now) and a user's choice.
+        s.set_default("md", "notas.old/A", "DexNotas");
+        s.set_default("md", "notas/A", "DexNotas");
+        s.set_default("txt", "notas.old/A", "DexNotas");
+        s.set_default("pdf", "editor/B", "Editor");
+        s.dex_offered = vec![
+            "md|notas.old/A".into(),
+            "md|notas/A".into(),
+            "txt|notas.old/A".into(),
+        ];
+        s.switch_app("md", "notas.old/A", true);
+        // The system couldn't be asked: nothing goes.
+        assert!(s.forget_missing_apps(None, None).is_empty());
+        // Only notas/A is a Dex app now; everything is installed but the old build.
+        let dex = vec!["notas/A".to_owned()];
+        let installed = vec!["notas/A".to_owned(), "editor/B".to_owned()];
+        let gone = s.forget_missing_apps(Some(&dex), Some(&installed));
+        assert_eq!(gone.len(), 2);
+        assert!(s.default_apps.iter().all(|d| d.app != "notas.old/A"));
+        // md had the old one on: the installed one takes over.
+        assert_eq!(s.default_app("md").map(|d| d.app.as_str()), Some("notas/A"));
+        assert_eq!(
+            s.default_app("pdf").map(|d| d.app.as_str()),
+            Some("editor/B")
+        );
+        assert_eq!(s.dex_offered, vec!["md|notas/A".to_owned()]);
     }
 
     #[test]

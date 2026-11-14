@@ -354,3 +354,4 @@ settings_interface	Interface	Interfaz
 one_extension	1 extension	1 extensión
 n_of_m_on	{} of {} on	{} de {} activadas
 apps_switch_hint	An extension can have several apps, but only one is on: switching one on switches the others off. “Change” adds another app and switches it on. With none on, double click opens the file with DexFiles’ viewers (or the system’s app).	Una extensión puede tener varias apps, pero solo una activada: al activar una se desactivan las demás. «Cambiar» añade otra app y la activa. Sin ninguna activada, el doble clic la abre con los visores de DexFiles (o con la app del sistema).
+apps_gone	Removed apps that are no longer installed: {}	Quitadas las apps que ya no están instaladas: {}

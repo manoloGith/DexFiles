@@ -46,22 +46,47 @@ pub fn parse_extensions(value: &str) -> Vec<String> {
 }
 
 /// The installed Dex apps that declare their extensions (blocks: run on a worker).
-pub fn dex_apps() -> Vec<DexApp> {
+/// `None` when the system couldn't be asked (then nothing is concluded from it).
+pub fn dex_apps() -> Option<Vec<DexApp>> {
     #[cfg(target_os = "android")]
     {
         crate::android::dex_apps()
     }
     #[cfg(not(target_os = "android"))]
     {
-        desktop::entries()
-            .into_iter()
-            .filter(|e| !e.dex_extensions.is_empty())
-            .map(|e| DexApp {
-                id: e.id,
-                label: e.name,
-                exts: e.dex_extensions,
-            })
-            .collect()
+        Some(
+            desktop::entries()
+                .into_iter()
+                .filter(|e| !e.dex_extensions.is_empty())
+                .map(|e| DexApp {
+                    id: e.id,
+                    label: e.name,
+                    exts: e.dex_extensions,
+                })
+                .collect(),
+        )
+    }
+}
+
+/// Which of these apps (as [`AppInfo::id`]) are installed; `None` when the system couldn't be
+/// asked. Blocks: run on a worker.
+pub fn installed(ids: &[String]) -> Option<Vec<String>> {
+    #[cfg(target_os = "android")]
+    {
+        crate::android::installed(ids)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let entries = desktop::entries();
+        if entries.is_empty() {
+            return None;
+        }
+        Some(
+            ids.iter()
+                .filter(|id| entries.iter().any(|e| e.id == **id))
+                .cloned()
+                .collect(),
+        )
     }
 }
 

@@ -1,0 +1,1 @@
+Ajustes ▸ Aplicaciones solo muestra las apps instaladas: se quitan las desinstaladas (versiones antiguas o de prueba de las apps Dex).

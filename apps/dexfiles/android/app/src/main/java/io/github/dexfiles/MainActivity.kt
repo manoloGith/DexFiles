@@ -53,6 +53,7 @@ class MainActivity : CraftActivity() {
             "media_scan" -> { mediaScan(args.getJSONArray("paths")); "{}" }
             "video_frame" -> videoFrame(File(args.getString("path")), args.optInt("max", 512))
             "dex_apps" -> JSONObject().put("apps", dexApps(args.optString("key"))).toString()
+            "installed" -> JSONObject().put("installed", installed(args.getJSONArray("ids"))).toString()
             "clip_set" -> { clipSet(args.getJSONArray("paths")); "{}" }
             "clip_import" -> clipImport()
             "drag_out" -> { dragOut(args.getJSONArray("paths")); "{}" }
@@ -195,6 +196,25 @@ class MainActivity : CraftActivity() {
                     .put("label", info.loadLabel(packageManager).toString())
                     .put("extensions", exts)
             )
+        }
+        return out
+    }
+
+    /** Which of these activities (`package/activity`) are installed. */
+    private fun installed(ids: JSONArray): JSONArray {
+        val out = JSONArray()
+        for (i in 0 until ids.length()) {
+            val id = ids.getString(i)
+            val pkg = id.substringBefore('/')
+            val cls = id.substringAfter('/', "").let { if (it.startsWith(".")) pkg + it else it }
+            val found = runCatching {
+                if (cls.isEmpty()) {
+                    @Suppress("DEPRECATION") packageManager.getPackageInfo(pkg, 0)
+                } else {
+                    @Suppress("DEPRECATION") packageManager.getActivityInfo(android.content.ComponentName(pkg, cls), 0)
+                }
+            }.isSuccess
+            if (found) out.put(id)
         }
         return out
     }
