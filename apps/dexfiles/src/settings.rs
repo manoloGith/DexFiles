@@ -434,9 +434,40 @@ impl Settings {
         self.default_apps.iter().find(|d| d.ext == ext && d.enabled)
     }
 
-    /// The app chosen for this extension, switched on or not.
+    /// The app chosen for this extension: the one switched on, else any kept for it.
     pub fn chosen_app(&self, ext: &str) -> Option<&DefaultApp> {
-        self.default_apps.iter().find(|d| d.ext == ext)
+        self.default_app(ext)
+            .or_else(|| self.default_apps.iter().find(|d| d.ext == ext))
+    }
+
+    /// Switch one app of an extension on or off. An extension may be kept with several apps,
+    /// but only one is on: switching one on switches the others off.
+    pub fn switch_app(&mut self, ext: &str, app: &str, on: bool) {
+        for d in self.default_apps.iter_mut().filter(|d| d.ext == ext) {
+            if d.app == app {
+                d.enabled = on;
+            } else if on {
+                d.enabled = false;
+            }
+        }
+    }
+
+    /// Make `app` the extension's default (the others it had stay, switched off).
+    pub fn set_default(&mut self, ext: &str, app: &str, label: &str) {
+        match self
+            .default_apps
+            .iter_mut()
+            .find(|d| d.ext == ext && d.app == app)
+        {
+            Some(d) => d.label = label.to_owned(),
+            None => self.default_apps.push(DefaultApp {
+                ext: ext.to_owned(),
+                app: app.to_owned(),
+                label: label.to_owned(),
+                enabled: true,
+            }),
+        }
+        self.switch_app(ext, app, true);
     }
 
     pub fn add_recent(&mut self, loc: &Location) {
@@ -491,6 +522,30 @@ mod tests {
         assert!(s.tag_defs.is_empty());
         s.init_tags();
         assert_eq!(s.tag_defs.len(), 7);
+    }
+
+    #[test]
+    fn one_app_on_per_extension() {
+        let mut s = Settings::default();
+        s.set_default("jpg", "a", "A");
+        s.set_default("jpg", "b", "B");
+        s.set_default("png", "a", "A");
+        assert_eq!(s.default_apps.len(), 3);
+        assert_eq!(s.default_app("jpg").map(|d| d.app.as_str()), Some("b"));
+        s.switch_app("jpg", "a", true);
+        assert_eq!(s.default_app("jpg").map(|d| d.app.as_str()), Some("a"));
+        assert_eq!(
+            s.default_apps
+                .iter()
+                .filter(|d| d.ext == "jpg" && d.enabled)
+                .count(),
+            1
+        );
+        // png keeps its app; switching it off leaves jpg alone.
+        s.switch_app("png", "a", false);
+        assert!(s.default_app("png").is_none());
+        assert_eq!(s.chosen_app("png").map(|d| d.app.as_str()), Some("a"));
+        assert_eq!(s.default_app("jpg").map(|d| d.app.as_str()), Some("a"));
     }
 
     #[test]

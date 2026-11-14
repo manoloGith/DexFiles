@@ -579,9 +579,13 @@ fn apps(app: &mut App, ui: &mut Ui, next: &mut Option<Dialog>) {
     });
     ui.add_space(6.0);
     let mut defaults = app.settings.default_apps.clone();
-    defaults.sort_by(|a, b| a.ext.cmp(&b.ext));
-    // Extensions switched on or off this frame.
-    let mut set: Vec<(String, bool)> = Vec::new();
+    defaults.sort_by(|a, b| {
+        a.ext
+            .cmp(&b.ext)
+            .then_with(|| a.label.to_lowercase().cmp(&b.label.to_lowercase()))
+    });
+    // (extension, app, on) switched this frame.
+    let mut set: Vec<(String, String, bool)> = Vec::new();
     card(app.dark, ui, |ui| {
         if defaults.is_empty() {
             ui.add_space(6.0);
@@ -598,7 +602,7 @@ fn apps(app: &mut App, ui: &mut Ui, next: &mut Option<Dialog>) {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let mut on = d.enabled;
                         if switch(ui, &mut on) {
-                            set.push((d.ext.clone(), on));
+                            set.push((d.ext.clone(), d.app.clone(), on));
                         }
                         if ui.small_button(t("change")).clicked() {
                             *next = Some(Dialog::open_with(d.ext.clone(), None));
@@ -643,7 +647,7 @@ fn apps(app: &mut App, ui: &mut Ui, next: &mut Option<Dialog>) {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let mut on = any_on;
                             if switch(ui, &mut on) {
-                                set.extend(exts.iter().map(|(e, _)| (e.clone(), on)));
+                                set.extend(exts.iter().map(|(e, _)| (e.clone(), id.clone(), on)));
                             }
                             ui.with_layout(
                                 egui::Layout::left_to_right(egui::Align::Center),
@@ -683,7 +687,7 @@ fn apps(app: &mut App, ui: &mut Ui, next: &mut Option<Dialog>) {
                                     |ui| {
                                         let mut on = *enabled;
                                         if switch(ui, &mut on) {
-                                            set.push((e.clone(), on));
+                                            set.push((e.clone(), id.clone(), on));
                                         }
                                         if ui.small_button(t("change")).clicked() {
                                             *next = Some(Dialog::open_with(e.clone(), None));
@@ -696,10 +700,8 @@ fn apps(app: &mut App, ui: &mut Ui, next: &mut Option<Dialog>) {
             }
         }
     });
-    for (ext, on) in set {
-        if let Some(d) = app.settings.default_apps.iter_mut().find(|d| d.ext == ext) {
-            d.enabled = on;
-        }
+    for (ext, id, on) in set {
+        app.settings.switch_app(&ext, &id, on);
     }
     ui.add_space(4.0);
     ui.label(RichText::new(t("apps_switch_hint")).small().color(pal.weak));

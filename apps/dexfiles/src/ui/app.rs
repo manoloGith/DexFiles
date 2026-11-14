@@ -1314,15 +1314,23 @@ impl App {
                 }
                 self.settings.dex_offered.push(key);
                 if self.settings.chosen_app(ext).is_none() {
+                    self.settings.set_default(ext, &a.id, &a.label);
+                    exts.push(format!(".{ext}"));
+                } else if !self
+                    .settings
+                    .default_apps
+                    .iter()
+                    .any(|d| d.ext == *ext && d.app == a.id)
+                {
+                    // Another app is chosen: this one is kept for it too, switched off.
                     self.settings
                         .default_apps
                         .push(crate::settings::DefaultApp {
                             ext: ext.clone(),
                             app: a.id.clone(),
                             label: a.label.clone(),
-                            enabled: true,
+                            enabled: false,
                         });
-                    exts.push(format!(".{ext}"));
                 }
             }
             if !exts.is_empty() {

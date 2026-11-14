@@ -667,13 +667,7 @@ fn open_with_dialog(app: &mut App, ctx: &egui::Context, st: &mut OpenWith) -> bo
     });
     if let Some(a) = chosen {
         if st.remember || st.file.is_none() {
-            app.settings.default_apps.retain(|d| d.ext != st.ext);
-            app.settings.default_apps.push(crate::settings::DefaultApp {
-                ext: st.ext.clone(),
-                app: a.id.clone(),
-                label: a.label.clone(),
-                enabled: true,
-            });
+            app.settings.set_default(&st.ext, &a.id, &a.label);
         }
         if let Some(f) = st.file.clone() {
             app.launch(f, Some(a.id), false);
