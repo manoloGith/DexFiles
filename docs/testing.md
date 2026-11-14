@@ -4,7 +4,8 @@
 
 Instala el APK (artefacto `dexfiles-debug-apk` de la CI, o `apps/dexfiles/android/app/build/outputs/apk/debug/`).
 Si algo falla, abre el diagnóstico (Ctrl+Mayús+D o el icono «Diagnóstico DexFiles») y pégame el
-informe.
+informe. Desde craft-android `ab7d2c9` el diagnóstico solo aparece en los APK de depuración (los de
+la CI, `dexfiles-debug-apk`); en las versiones publicadas no está.
 
 1. Primer arranque: aparece el aviso **«DexFiles necesita acceso a todos los archivos»** →
    *Permitir el acceso* → activar el interruptor → volver: la lista se carga sola.

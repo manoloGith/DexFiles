@@ -1,0 +1,1 @@
+El tema «Sistema» sigue ahora el modo claro u oscuro de Android, al abrir y cuando cambia.

@@ -1,0 +1,1 @@
+The "System" theme now follows Android's light or dark mode, at start and when it changes.
