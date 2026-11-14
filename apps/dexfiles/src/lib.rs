@@ -33,10 +33,26 @@ pub struct Launch {
 }
 
 /// The window's options, shared by Android and the desktop binary.
+/// The app's icon (the launcher's, as a 256 px PNG): the window's on a desktop, and About's.
+pub const ICON_PNG: &[u8] = include_bytes!("../assets/icon.png");
+
+fn window_icon() -> Option<std::sync::Arc<egui::IconData>> {
+    let img = image::load_from_memory(ICON_PNG).ok()?.to_rgba8();
+    Some(std::sync::Arc::new(egui::IconData {
+        width: img.width(),
+        height: img.height(),
+        rgba: img.into_raw(),
+    }))
+}
+
 pub fn native_options(renderer: eframe::Renderer, launch: &Launch) -> eframe::NativeOptions {
+    let mut viewport = egui::ViewportBuilder::default();
+    if let Some(icon) = window_icon() {
+        viewport = viewport.with_icon(icon);
+    }
     eframe::NativeOptions {
         renderer,
-        viewport: egui::ViewportBuilder::default()
+        viewport: viewport
             .with_title("DexFiles")
             .with_app_id("dexfiles")
             .with_inner_size([1280.0, 800.0])

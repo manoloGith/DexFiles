@@ -530,8 +530,13 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             let close = modal(ctx, "about", 420.0, |ui| {
                 ui.vertical_centered(|ui| {
                     let (r, _) =
-                        ui.allocate_exact_size(egui::Vec2::splat(72.0), egui::Sense::hover());
-                    super::icons::folder(ui.painter(), r, theme::ACCENT);
+                        ui.allocate_exact_size(egui::Vec2::splat(88.0), egui::Sense::hover());
+                    match app_icon(ctx) {
+                        Some(tex) => {
+                            egui::Image::from_texture(&tex).paint_at(ui, r);
+                        }
+                        None => super::icons::folder(ui.painter(), r, theme::ACCENT),
+                    }
                     ui.heading("DexFiles");
                     ui.label(format!("{} {}", t("version"), env!("CARGO_PKG_VERSION")));
                     ui.label(t("about_text"));
@@ -1260,4 +1265,20 @@ fn batch_rename_dialog(app: &mut App, ctx: &egui::Context, st: &mut BatchRename)
         }
     });
     keep && !close
+}
+
+/// The app's icon as a texture (decoded once).
+fn app_icon(ctx: &egui::Context) -> Option<egui::TextureHandle> {
+    let id = egui::Id::unique("app-icon");
+    if let Some(t) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
+        return Some(t);
+    }
+    let img = image::load_from_memory(crate::ICON_PNG).ok()?.to_rgba8();
+    let image = egui::ColorImage::from_rgba_unmultiplied(
+        [img.width() as usize, img.height() as usize],
+        img.as_raw(),
+    );
+    let tex = ctx.load_texture("app-icon", image, egui::TextureOptions::LINEAR);
+    ctx.data_mut(|d| d.insert_temp(id, tex.clone()));
+    Some(tex)
 }
