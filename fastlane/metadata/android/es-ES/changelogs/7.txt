@@ -1,0 +1,1 @@
+Abrir un APK lo instala (Android pide una vez permitir instalar desde DexFiles).

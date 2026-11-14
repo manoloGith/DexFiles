@@ -1,0 +1,1 @@
+Opening an APK installs it (Android asks once to allow installs from DexFiles).
