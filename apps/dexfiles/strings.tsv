@@ -352,3 +352,5 @@ tags_hint	Tags are put on from a file's context menu, or by dropping files on a 
 settings_apps	Apps	Aplicaciones
 settings_interface	Interface	Interfaz
 one_extension	1 extension	1 extensión
+n_of_m_on	{} of {} on	{} de {} activadas
+apps_switch_hint	A switched-off extension keeps its app here; until it is switched on again, double click opens it with DexFiles' viewers (or the system's app).	Una extensión desactivada conserva aquí su app; mientras no se vuelva a activar, el doble clic la abre con los visores de DexFiles (o con la app del sistema).

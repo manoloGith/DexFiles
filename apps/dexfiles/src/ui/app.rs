@@ -1313,13 +1313,14 @@ impl App {
                     continue;
                 }
                 self.settings.dex_offered.push(key);
-                if self.settings.default_app(ext).is_none() {
+                if self.settings.chosen_app(ext).is_none() {
                     self.settings
                         .default_apps
                         .push(crate::settings::DefaultApp {
                             ext: ext.clone(),
                             app: a.id.clone(),
                             label: a.label.clone(),
+                            enabled: true,
                         });
                     exts.push(format!(".{ext}"));
                 }

@@ -561,7 +561,7 @@ fn open_with_dialog(app: &mut App, ctx: &egui::Context, st: &mut OpenWith) -> bo
     if loaded.is_none() {
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
     }
-    let current = app.settings.default_app(&st.ext).cloned();
+    let current = app.settings.chosen_app(&st.ext).cloned();
     let mut chosen: Option<crate::apps::AppInfo> = None;
     let mut system = false;
     let mut clear_default = false;
@@ -672,6 +672,7 @@ fn open_with_dialog(app: &mut App, ctx: &egui::Context, st: &mut OpenWith) -> bo
                 ext: st.ext.clone(),
                 app: a.id.clone(),
                 label: a.label.clone(),
+                enabled: true,
             });
         }
         if let Some(f) = st.file.clone() {

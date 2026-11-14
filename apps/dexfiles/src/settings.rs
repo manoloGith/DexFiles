@@ -151,6 +151,13 @@ pub struct DefaultApp {
     /// Android: `package/activity`; desktop: the `.desktop` file's id.
     pub app: String,
     pub label: String,
+    /// Off: kept in the list (Settings ▸ Apps) but not used; DexFiles' viewers open the file.
+    #[serde(default = "enabled_by_default")]
+    pub enabled: bool,
+}
+
+fn enabled_by_default() -> bool {
+    true
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -422,7 +429,13 @@ impl Settings {
         }
     }
 
+    /// The app files with this extension open with, if one is chosen and switched on.
     pub fn default_app(&self, ext: &str) -> Option<&DefaultApp> {
+        self.default_apps.iter().find(|d| d.ext == ext && d.enabled)
+    }
+
+    /// The app chosen for this extension, switched on or not.
+    pub fn chosen_app(&self, ext: &str) -> Option<&DefaultApp> {
         self.default_apps.iter().find(|d| d.ext == ext)
     }
 

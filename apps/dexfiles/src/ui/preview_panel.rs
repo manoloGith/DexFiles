@@ -183,6 +183,7 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
     let mut play = false;
     let mut fullscreen = false;
     let mut open_viewer = false;
+    let mut open_app = false;
     match &app.preview.content {
         Some(content @ (Content::Image { .. } | Content::Pdf { .. } | Content::Media { .. })) => {
             let reserve = if matches!(content, Content::Pdf { pages, .. } if *pages > 1)
@@ -196,7 +197,10 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
             let pic_resp = ui.allocate_rect(area, Sense::click());
             // A double click: the image viewer, or the player over the whole window.
             if pic_resp.double_clicked() {
-                if super::viewer::viewable(e) {
+                // A file with a default app opens in it (the viewers stay on Space).
+                if app.settings.default_app(&e.ext).is_some() && e.trash.is_none() {
+                    open_app = true;
+                } else if super::viewer::viewable(e) {
                     open_viewer = true;
                 } else if super::player::playable(e) && crate::media::available() {
                     play = true;
@@ -453,8 +457,11 @@ pub fn content(app: &mut App, ui: &mut Ui, e: &Entry, large: bool) {
     if open_viewer {
         super::viewer::open(app, e);
     }
-    if large && (play || open_viewer) {
+    if large && (play || open_viewer || open_app) {
         app.quick_look = None;
+    }
+    if open_app {
+        app.open_file(e.location.clone(), false);
     }
 }
 

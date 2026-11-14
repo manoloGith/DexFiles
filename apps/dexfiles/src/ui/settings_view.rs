@@ -580,23 +580,25 @@ fn apps(app: &mut App, ui: &mut Ui, next: &mut Option<Dialog>) {
     ui.add_space(6.0);
     let mut defaults = app.settings.default_apps.clone();
     defaults.sort_by(|a, b| a.ext.cmp(&b.ext));
-    let mut remove: Vec<String> = Vec::new();
+    // Extensions switched on or off this frame.
+    let mut set: Vec<(String, bool)> = Vec::new();
     card(app.dark, ui, |ui| {
         if defaults.is_empty() {
             ui.add_space(6.0);
             ui.label(RichText::new(t("no_default_apps")).color(pal.weak));
             ui.add_space(6.0);
         } else if !app.settings_ui.by_app {
-            // By extension: one row each.
+            // By extension: one row each, with its switch.
             for (i, d) in defaults.iter().enumerate() {
                 if i > 0 {
                     divider_raw(ui);
                 }
                 ui.horizontal(|ui| {
-                    ui.set_min_height(32.0);
+                    ui.set_min_height(34.0);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button(t("remove_default")).clicked() {
-                            remove.push(d.ext.clone());
+                        let mut on = d.enabled;
+                        if switch(ui, &mut on) {
+                            set.push((d.ext.clone(), on));
                         }
                         if ui.small_button(t("change")).clicked() {
                             *next = Some(Dialog::open_with(d.ext.clone(), None));
@@ -604,18 +606,24 @@ fn apps(app: &mut App, ui: &mut Ui, next: &mut Option<Dialog>) {
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                             ext_badge(ui, &d.ext);
                             ui.add_space(8.0);
-                            ui.add(egui::Label::new(&d.label).truncate());
+                            let text = if d.enabled {
+                                RichText::new(&d.label)
+                            } else {
+                                RichText::new(&d.label).color(pal.weak)
+                            };
+                            ui.add(egui::Label::new(text).truncate());
                         });
                     });
                 });
             }
         } else {
-            // By app: each app, and under it the extensions it opens.
-            let mut groups: Vec<(String, String, Vec<String>)> = Vec::new();
+            // By app: each app with a switch for all its extensions, and under it each one.
+            let mut groups: Vec<AppGroup> = Vec::new();
             for d in &defaults {
+                let item = (d.ext.clone(), d.enabled);
                 match groups.iter_mut().find(|g| g.0 == d.app) {
-                    Some(g) => g.2.push(d.ext.clone()),
-                    None => groups.push((d.app.clone(), d.label.clone(), vec![d.ext.clone()])),
+                    Some(g) => g.2.push(item),
+                    None => groups.push((d.app.clone(), d.label.clone(), vec![item])),
                 }
             }
             groups.sort_by_key(|g| g.1.to_lowercase());
@@ -628,37 +636,43 @@ fn apps(app: &mut App, ui: &mut Ui, next: &mut Option<Dialog>) {
                     ui.make_persistent_id(("apps-by-app", id)),
                     true,
                 );
+                let any_on = exts.iter().any(|(_, on)| *on);
                 state
                     .show_header(ui, |ui| {
-                        ui.set_min_height(30.0);
-                        let (ir, _) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::hover());
-                        icons::sym(ui.painter(), ir, Sym::Apps, theme::ACCENT);
-                        ui.label(RichText::new(label).strong());
-                        ui.label(
-                            RichText::new(if exts.len() == 1 {
-                                t("one_extension").to_owned()
-                            } else {
-                                tf("n_extensions", exts.len())
-                            })
-                            .small()
-                            .color(pal.weak),
-                        );
+                        ui.set_min_height(32.0);
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button(t("remove_all")).clicked() {
-                                remove.extend(exts.iter().cloned());
+                            let mut on = any_on;
+                            if switch(ui, &mut on) {
+                                set.extend(exts.iter().map(|(e, _)| (e.clone(), on)));
                             }
+                            ui.with_layout(
+                                egui::Layout::left_to_right(egui::Align::Center),
+                                |ui| {
+                                    let (ir, _) =
+                                        ui.allocate_exact_size(Vec2::splat(18.0), Sense::hover());
+                                    icons::sym(ui.painter(), ir, Sym::Apps, theme::ACCENT);
+                                    let name = RichText::new(label).strong();
+                                    ui.label(if any_on { name } else { name.color(pal.weak) });
+                                    let on_count = exts.iter().filter(|(_, on)| *on).count();
+                                    ui.label(
+                                        RichText::new(tf2("n_of_m_on", on_count, exts.len()))
+                                            .small()
+                                            .color(pal.weak),
+                                    );
+                                },
+                            );
                         });
                     })
                     .body(|ui| {
-                        for e in exts {
+                        for (e, enabled) in exts {
                             ui.horizontal(|ui| {
-                                ui.set_min_height(28.0);
+                                ui.set_min_height(30.0);
                                 // The tree's guide.
                                 let r = ui.available_rect_before_wrap();
                                 ui.painter().line_segment(
                                     [
                                         pos2(r.left() + 2.0, r.top()),
-                                        pos2(r.left() + 2.0, r.top() + 28.0),
+                                        pos2(r.left() + 2.0, r.top() + 30.0),
                                     ],
                                     Stroke::new(1.0, pal.separator),
                                 );
@@ -667,8 +681,9 @@ fn apps(app: &mut App, ui: &mut Ui, next: &mut Option<Dialog>) {
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
-                                        if ui.small_button(t("remove_default")).clicked() {
-                                            remove.push(e.clone());
+                                        let mut on = *enabled;
+                                        if switch(ui, &mut on) {
+                                            set.push((e.clone(), on));
                                         }
                                         if ui.small_button(t("change")).clicked() {
                                             *next = Some(Dialog::open_with(e.clone(), None));
@@ -681,11 +696,13 @@ fn apps(app: &mut App, ui: &mut Ui, next: &mut Option<Dialog>) {
             }
         }
     });
-    if !remove.is_empty() {
-        app.settings
-            .default_apps
-            .retain(|d| !remove.contains(&d.ext));
+    for (ext, on) in set {
+        if let Some(d) = app.settings.default_apps.iter_mut().find(|d| d.ext == ext) {
+            d.enabled = on;
+        }
     }
+    ui.add_space(4.0);
+    ui.label(RichText::new(t("apps_switch_hint")).small().color(pal.weak));
     caption(app.dark, ui, t("apps_add"));
     card(app.dark, ui, |ui| {
         row(ui, t("extension"), Some(t("apps_add_hint")), |ui| {
@@ -721,6 +738,16 @@ fn apps(app: &mut App, ui: &mut Ui, next: &mut Option<Dialog>) {
             },
         );
     });
+}
+
+/// An app (id, name) and its extensions, each switched on or off.
+type AppGroup = (String, String, Vec<(String, bool)>);
+
+/// A string with two `{}`.
+fn tf2(key: &str, a: usize, b: usize) -> String {
+    t(key)
+        .replacen("{}", &a.to_string(), 1)
+        .replacen("{}", &b.to_string(), 1)
 }
 
 /// `.ext` in a small rounded badge.
