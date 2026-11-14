@@ -4,4 +4,5 @@
     <string name="open_with">Abrir con</string>
     <string name="share_with">Compartir</string>
     <string name="send_email">Enviar por correo</string>
+    <string name="allow_installs">Permite instalar apps desde DexFiles y vuelve a abrir el APK</string>
 </resources>

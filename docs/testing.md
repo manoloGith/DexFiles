@@ -52,7 +52,9 @@ la CI, `dexfiles-debug-apk`); en las versiones publicadas no está.
 23. Ajustes: las seis pestañas; Aplicaciones «Por aplicación»; Etiquetas: crear una, cambiarle
     nombre y color, ordenarla, ponerla a un archivo, eliminarla. Actualizar el APK (o forzar el
     cierre) y comprobar que todo sigue igual.
-24. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
+24. Abrir un `.apk`: la primera vez lleva a «Instalar apps desconocidas» de DexFiles; tras
+    permitirlo, abrirlo otra vez muestra el instalador de Android.
+25. Móvil: teclado en pantalla en la búsqueda y al renombrar, el botón Atrás vuelve atrás, giro.
 
 ## Tests automáticos
 

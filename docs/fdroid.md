@@ -159,6 +159,9 @@ Puntos que la revisión de F-Droid mirará:
   que no es software libre. El resto de formatos funcionan igual.
 - **Permiso «Acceso a todos los archivos»** (`MANAGE_EXTERNAL_STORAGE`). F-Droid lo admite en un
   explorador de archivos; se pide en la app, explicando para qué.
+- **Permiso para instalar apps** (`REQUEST_INSTALL_PACKAGES`): para instalar los APK que se abren
+  desde el explorador. F-Droid lo admite en exploradores de archivos; Android pide al usuario que lo
+  permita la primera vez.
 - **Firma.** F-Droid firma con su propia clave, salvo que se active la verificación de builds
   reproducibles contra el APK de GitHub. La biblioteca nativa se compila sin rutas locales
   (`--remap-path-prefix`) y el APK no lleva información de dependencias ni del control de

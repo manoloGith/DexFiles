@@ -118,11 +118,30 @@ class MainActivity : CraftActivity() {
             ?: when (ext) {
                 "md", "log", "ini", "conf", "rs", "kt", "py", "sh", "toml", "yaml", "yml" -> "text/plain"
                 "7z" -> "application/x-7z-compressed"
+                "apk" -> "application/vnd.android.package-archive"
                 else -> "*/*"
             }
     }
 
     private fun open(file: File, chooser: Boolean, app: String): String {
+        // An APK installs; the first time, the user allows installs from DexFiles in Settings.
+        if (file.extension.equals("apk", ignoreCase = true) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            runOnUiThread {
+                try {
+                    startActivity(
+                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                    CraftActivity.toast(getString(R.string.allow_installs))
+                } catch (e: Exception) {
+                    Log.w(TAG, "no unknown-sources settings: $e")
+                    CraftActivity.toast(getString(R.string.allow_installs))
+                }
+            }
+            return "{}"
+        }
         val uri = uriFor(file)
         val intent = Intent(Intent.ACTION_VIEW)
             .setDataAndType(uri, mimeFor(file))

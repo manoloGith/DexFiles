@@ -41,6 +41,7 @@ servidor real · ⏳ fase siguiente.
 | Arrastrar a otras apps | 🟡 | Un arrastre de archivos que sale de la ventana pasa a ser un arrastre del sistema (Android): se pueden soltar en Mis archivos, el correo, un chat… Solo archivos locales. Si vuelven a soltarse en DexFiles se copian los originales. |
 | Portapapeles entre apps | 🟡 | Copiar/cortar pone los archivos en el portapapeles de Android (como archivos, no solo rutas); pegar en DexFiles toma primero los archivos que otra app haya copiado. |
 | Renombrado por lotes | ✅ | F2 o *Renombrar N elementos…* con varios seleccionados: reemplazar texto, añadir delante/detrás, numerar (`#` donde va el número), mayúsculas/minúsculas; vista previa con los nombres que chocan en rojo; se pueden intercambiar nombres entre ellos. |
+| Instalar APK | 🟡 | Abrir un `.apk` lo instala (permiso `REQUEST_INSTALL_PACKAGES`). La primera vez DexFiles abre la pantalla de Android para permitir instalar apps desde DexFiles; después, el instalador del sistema. |
 | Compartir | 🟡 | *Compartir…* (hoja de compartir de Android, varias apps) y *Enviar por correo* (solo apps de correo, como adjuntos). Los archivos de servidores se descargan antes. |
 
 ### 3. Visualización y personalización
